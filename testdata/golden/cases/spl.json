@@ -1,0 +1,20 @@
+[
+{"name": "where-long", "op": "logs", "query": "* | where latency_ms > 300", "line": 5},
+{"name": "where-text", "op": "logs", "query": "* | where level = 'ERROR'", "line": 5},
+{"name": "where-cast", "op": "logs", "query": "* | where cast(latency_ms as bigint) > 300", "line": 5},
+{"name": "where-like", "op": "logs", "query": "* | where msg like '%order%'", "line": 5},
+{"name": "where-string-compare", "op": "logs", "query": "* | where latency_ms > '300'", "line": 5},
+{"name": "where-tag-quoted", "op": "logs", "query": "* | where \"__tag__:__path__\" = '/var/log/app/audit.log'", "line": 5},
+{"name": "where-tag-unquoted", "op": "logs", "query": "* | where __tag__:__path__ = '/var/log/app/audit.log'", "line": 5},
+{"name": "search-then-where", "op": "logs", "query": "level: ERROR | where service = 'inventory'", "line": 5},
+{"name": "where-twice", "op": "logs", "query": "* | where level = 'ERROR' | where service = 'checkout'", "line": 5},
+{"name": "extend", "op": "logs", "query": "service: auth | extend x = 1", "line": 5},
+{"name": "extend-cast", "op": "logs", "query": "* | extend c = cast(latency_ms as bigint) | where c > 1000", "line": 5},
+{"name": "project", "op": "logs", "query": "service: auth | project level, msg", "line": 5},
+{"name": "project-away", "op": "logs", "query": "service: auth | project-away msg", "line": 5},
+{"name": "parse-json", "op": "logs", "query": "* | where ctx is not null | parse-json ctx", "line": 5},
+{"name": "stats", "op": "logs", "query": "* | stats count() by level", "line": 5},
+{"name": "sort-limit", "op": "logs", "query": "* | sort latency_ms desc | limit 3", "line": 5},
+{"name": "limit", "op": "logs", "query": "* | limit 2", "line": 5},
+{"name": "with-pack-meta", "op": "logs", "query": "service: auth | with_pack_meta", "line": 5}
+]

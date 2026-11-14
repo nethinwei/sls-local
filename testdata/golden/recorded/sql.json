@@ -1,0 +1,3800 @@
+{
+  "base": 1793842027,
+  "logstoreLen": 13,
+  "recordedAt": "2026-11-14",
+  "results": [
+    {
+      "name": "count",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2527,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c",
+            "insertedSQL": "1,21, from \"{logstore}\" ",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "2527",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "count-implicit-alias",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) c",
+            "insertedSQL": "1,18, from \"{logstore}\" ",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "count-noalias",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*)",
+            "insertedSQL": "1,16, from \"{logstore}\" ",
+            "keys": [
+              "_col0"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "_col0": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "count-distinct",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(distinct trace_id) as t, count(latency_ms) as n, count(1) as one",
+            "insertedSQL": "1,78, from \"{logstore}\" ",
+            "keys": [
+              "t",
+              "n",
+              "one"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long",
+              "long",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "t": "1911",
+              "n": "1056",
+              "one": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "agg-long",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select sum(latency_ms) as s, avg(latency_ms) as a, min(latency_ms) as mi, max(latency_ms) as ma",
+            "insertedSQL": "1,96, from \"{logstore}\" ",
+            "keys": [
+              "s",
+              "a",
+              "mi",
+              "ma"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long",
+              "double",
+              "long",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "s": "341256",
+              "a": "323.15909090909096",
+              "mi": "-5",
+              "ma": "3196",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "agg-double",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select sum(ratio) as s, avg(ratio) as a, min(amount) as mi, max(elapsed_ms) as ma",
+            "insertedSQL": "1,82, from \"{logstore}\" ",
+            "keys": [
+              "s",
+              "a",
+              "mi",
+              "ma"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "double",
+              "double",
+              "double",
+              "double"
+            ]
+          },
+          "data": [
+            {
+              "s": "80.80399999999995",
+              "a": "0.4927073170731704",
+              "mi": "2.5",
+              "ma": "988.504",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "group",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, count(*) as c group by level order by c desc",
+            "insertedSQL": "1,29, from \"{logstore}\" ",
+            "keys": [
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "c": "2037",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "group-implicit",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, count(*) c group by level order by c desc",
+            "insertedSQL": "1,26, from \"{logstore}\" ",
+            "keys": [
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "c": "2037",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "group-2",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 9,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select service, level, count(*) as c group by service, level order by service, level",
+            "insertedSQL": "1,38, from \"{logstore}\" ",
+            "keys": [
+              "service",
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "service": "auth",
+              "level": "INFO",
+              "c": "455",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "auth",
+              "level": "WARN",
+              "c": "150",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "checkout",
+              "level": "ERROR",
+              "c": "93",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "checkout",
+              "level": "Error",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "checkout",
+              "level": "INFO",
+              "c": "1066",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "checkout",
+              "level": "WARN",
+              "c": "133",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "inventory",
+              "level": "ERROR",
+              "c": "72",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "inventory",
+              "level": "INFO",
+              "c": "516",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "inventory",
+              "level": "WARN",
+              "c": "43",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "group-ordinal",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select service, count(*) as c group by 1 order by 1",
+            "insertedSQL": "1,31, from \"{logstore}\" ",
+            "keys": [
+              "service",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "service": "auth",
+              "c": "605",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "checkout",
+              "c": "1293",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "inventory",
+              "c": "631",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "having",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, count(*) as c group by level having count(*) > 50 order by level",
+            "insertedSQL": "1,29, from \"{logstore}\" ",
+            "keys": [
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "c": "2037",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "where",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 142,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c where latency_ms > 300",
+            "insertedSQL": "1,22, from \"{logstore}\" ",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "142",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "from-log-where",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 166,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(1) as c from log where level = 'ERROR'",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "search-and-sql",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 2,
+            "progress": "Complete",
+            "processedRows": 166,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "level: ERROR ",
+            "aggQuery": " select service, count(*) as c group by service order by service",
+            "insertedSQL": "1,31, from \"{logstore}\" ",
+            "keys": [
+              "service",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "error",
+                "key": "level"
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "service": "checkout",
+              "c": "94",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "inventory",
+              "c": "72",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "search-and-sql2",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 405,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "service: checkout and latency_ms > 100",
+            "aggQuery": " select count(*) as c",
+            "insertedSQL": "1,21, from \"{logstore}\" ",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": "latency_ms"
+              },
+              {
+                "term": "checkout",
+                "key": "service"
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "405",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "like",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c from log where msg like '%order%'",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "288",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "in",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 492,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c from log where level in ('ERROR', 'WARN')",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "491",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "between",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 237,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c from log where latency_ms between 100 and 200",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "237",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "is-null",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c from log where order_id is null",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "1985",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "is-not-null",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) as c from log where ctx is not null",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "55",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "order-limit",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 74,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select msg, latency_ms where latency_ms > 1000 order by latency_ms desc, msg limit 3",
+            "insertedSQL": "1,24, from \"{logstore}\" ",
+            "keys": [
+              "msg",
+              "latency_ms"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "msg": "upstream timeout",
+              "latency_ms": "3196",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "latency_ms": "3194",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "latency_ms": "3188",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "limit-default",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 100,
+            "progress": "Complete",
+            "processedRows": 127,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select msg",
+            "insertedSQL": "1,11, from \"{logstore}\" ",
+            "keys": [
+              "msg"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar"
+            ]
+          },
+          "data": [
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment failed: card declined",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "cart updated",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "cart updated",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "cart updated",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment failed: card declined",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment failed: card declined",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "cart updated",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "say \"hello\" to <world> & friends",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment failed: card declined",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "slow query",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment authorized",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "upstream timeout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "payment failed: card declined",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "order created",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "msg": "request completed",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "limit-big",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, count(*) as c group by level order by level limit 100000",
+            "insertedSQL": "1,29, from \"{logstore}\" ",
+            "keys": [
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "c": "2037",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "limit-offset",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "ErrorType:SyntaxError.ErrorPosition,line:1,column:74.ErrorMessage:line 1:74: mismatched input 'offset' expecting <EOF>"
+        }
+      }
+    },
+    {
+      "name": "distinct",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select distinct service order by service",
+            "insertedSQL": "1,25, from \"{logstore}\" ",
+            "keys": [
+              "service"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar"
+            ]
+          },
+          "data": [
+            {
+              "service": "auth",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "checkout",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "service": "inventory",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-quoted",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select \"level\", \"__time__\" order by __time__ limit 1",
+            "insertedSQL": "1,28, from \"{logstore}\" ",
+            "keys": [
+              "level",
+              "__time__"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "__time__": "1793842027",
+              "__source__": "",
+              "__time___0": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-meta",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 2,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select __topic__, __source__, __time__ order by __time__ limit 2",
+            "insertedSQL": "1,40, from \"{logstore}\" ",
+            "keys": [
+              "__topic__",
+              "__source__",
+              "__time__"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "__topic__": "null",
+              "__source__": "10.0.0.11",
+              "__time__": "1793842027",
+              "__time___0": "1793842027"
+            },
+            {
+              "__topic__": "null",
+              "__source__": "10.0.0.11",
+              "__time__": "1793842027",
+              "__time___0": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-tag",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "line 1:9: Column '__tag__:__path__' cannot be resolved; it seems __tag__:__path__ is wrapped by \"; if __tag__:__path__ is a string rather than a column, please use '__tag__:__path__'"
+        }
+      }
+    },
+    {
+      "name": "select-alias-index",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select svc, count(*) as c group by svc order by svc",
+            "insertedSQL": "1,27, from \"{logstore}\" ",
+            "keys": [
+              "svc",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "svc": "auth",
+              "c": "605",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "svc": "checkout",
+              "c": "1293",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "svc": "inventory",
+              "c": "631",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-json-sub",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select \"ctx.user.tier\" as tier, count(*) as c where \"ctx.user.tier\" is not null group by tier order by tier",
+            "insertedSQL": "1,47, from \"{logstore}\" ",
+            "keys": [
+              "tier",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "tier": "basic",
+              "c": "13",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "tier": "gold",
+              "c": "22",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "tier": "silver",
+              "c": "18",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-json-sub-long",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select max(\"ctx.user.id\") as m",
+            "insertedSQL": "1,31, from \"{logstore}\" ",
+            "keys": [
+              "m"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "m": "986",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-nodocvalue",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 61,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select url limit 1",
+            "insertedSQL": "1,12, from \"{logstore}\" ",
+            "keys": [
+              "url"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar"
+            ]
+          },
+          "data": [
+            {
+              "url": "null",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-unindexed",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "line 1:9: Column 'method' cannot be resolved; please add the column in the index attribute"
+        }
+      }
+    },
+    {
+      "name": "select-unknown",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "line 1:9: Column 'nonexist' cannot be resolved; please add the column in the index attribute"
+        }
+      }
+    },
+    {
+      "name": "other-logstore",
+      "response": {
+        "status": 404,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "LogStoreNotExist",
+          "errorMessage": "logstore (other) is not found"
+        }
+      }
+    },
+    {
+      "name": "qualified",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "line 1:9: Column 'log.level' cannot be resolved; please add the column in the index attribute"
+        }
+      }
+    },
+    {
+      "name": "subquery",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, c from (select level, count(*) as c from log group by level) where c > 10 order by level",
+            "keys": [
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "c": "2037",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "subquery-sum",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select sum(c) as s from (select count(*) as c from log group by level)",
+            "keys": [
+              "s"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "s": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "subquery-implicit",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select sum(c) from (select count(*) c from log group by level)",
+            "keys": [
+              "_col0"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "_col0": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cte",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " with t as (select level, count(*) as c from log group by level) select level, c from t order by level",
+            "keys": [
+              "level",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "c": "165",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "c": "2037",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "union",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 2,
+            "progress": "Complete",
+            "processedRows": 492,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level from log where level = 'ERROR' union all select level from log where level = 'WARN' limit 2",
+            "keys": [
+              "level"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "window-rownum",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, row_number() over (order by level) as rn from (select distinct level from log) order by level",
+            "keys": [
+              "level",
+              "rn"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "rn": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "rn": "2",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "rn": "3",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "rn": "4",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "window-rank",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, c, rank() over (order by c desc) as r, lag(c) over (order by level) as l, sum(c) over () as t from (select level, count(*) as c from log group by level) order by level",
+            "keys": [
+              "level",
+              "c",
+              "r",
+              "l",
+              "t"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long",
+              "long",
+              "long",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "c": "165",
+              "r": "3",
+              "l": "null",
+              "t": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "c": "1",
+              "r": "4",
+              "l": "165",
+              "t": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "c": "2037",
+              "r": "1",
+              "l": "1",
+              "t": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "r": "2",
+              "l": "2037",
+              "t": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "window-pct",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, count(*) as c, count(*) * 100.0 / sum(count(*)) over () as pct group by level order by level",
+            "insertedSQL": "1,78, from \"{logstore}\" ",
+            "keys": [
+              "level",
+              "c",
+              "pct"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long",
+              "double"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "c": "165",
+              "pct": "6.524317912218268",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "c": "1",
+              "pct": "0.039541320680110719",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "c": "2037",
+              "pct": "80.54567022538552",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "c": "326",
+              "pct": "12.890470541716093",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "multiply",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select latency_ms * 2 as x, latency_ms * 1.5 as y, latency_ms / 7 as z order by __time__, msg limit 3",
+            "insertedSQL": "1,72, from \"{logstore}\" ",
+            "keys": [
+              "x",
+              "y",
+              "z"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "long",
+              "double",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "x": "null",
+              "y": "null",
+              "z": "null",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "x": "null",
+              "y": "null",
+              "z": "null",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "x": "418",
+              "y": "313.5",
+              "z": "29",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "arith-agg",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select sum(latency_ms) * 1.0 / count(latency_ms) as a",
+            "insertedSQL": "1,54, from \"{logstore}\" ",
+            "keys": [
+              "a"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "double"
+            ]
+          },
+          "data": [
+            {
+              "a": "323.15909090909096",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "filter-clause",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(*) filter (where latency_ms > 300) as f",
+            "insertedSQL": "1,53, from \"{logstore}\" ",
+            "keys": [
+              "f"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "f": "142",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "set-session",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " set session parallel_sql=true; select count(*) as c",
+            "insertedSQL": "1,52, from \"{logstore}\" ",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "2529",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "case",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select case when latency_ms > 300 then 'slow' when latency_ms > 100 then 'mid' else 'fast' end as k, count(*) as c where latency_ms is not null group by k order by k",
+            "insertedSQL": "1,116, from \"{logstore}\" ",
+            "keys": [
+              "k",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar(4)",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "k": "fast",
+              "c": "582",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "k": "mid",
+              "c": "332",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "k": "slow",
+              "c": "142",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "if",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 2,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select if(latency_ms > 300, 'slow', 'fast') as k, count(*) as c group by k order by k",
+            "insertedSQL": "1,65, from \"{logstore}\" ",
+            "keys": [
+              "k",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar(4)",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "k": "fast",
+              "c": "2387",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "k": "slow",
+              "c": "142",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "coalesce",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 3,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select coalesce(order_id, 'none') as o, count(*) as c group by o order by c desc, o limit 3",
+            "insertedSQL": "1,55, from \"{logstore}\" ",
+            "keys": [
+              "o",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "o": "none",
+              "c": "1985",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "o": "ORD00489787",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "o": "ORD00679867",
+              "c": "1",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "cast-text",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select sum(cast(user_id as bigint)) as s",
+            "insertedSQL": "1,41, from \"{logstore}\" ",
+            "keys": [
+              "s"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "s": "48864434",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "try-cast",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select count(try_cast(msg as bigint)) as c",
+            "insertedSQL": "1,43, from \"{logstore}\" ",
+            "keys": [
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "c": "0",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "bigint-vs-string",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "ErrorType:SyntaxError.ErrorPosition,line:1,column:40.ErrorMessage:line 1:62: '>' cannot be applied to bigint, varchar(3)"
+        }
+      }
+    },
+    {
+      "name": "divide-zero",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "/ by zero"
+        }
+      }
+    },
+    {
+      "name": "cast-fail",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "ErrorType:SyntaxError.ErrorMessage:Can not cast 'a' to BIGINT"
+        }
+      }
+    },
+    {
+      "name": "time-bucket",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select __time__ - __time__ % 60 as t, count(*) as c group by t order by t limit 5",
+            "insertedSQL": "1,53, from \"{logstore}\" ",
+            "keys": [
+              "t",
+              "c"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "long",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "t": "1793842020",
+              "c": "113",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "t": "1793842080",
+              "c": "130",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "t": "1793842140",
+              "c": "118",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "t": "1793842200",
+              "c": "120",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "t": "1793842260",
+              "c": "138",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "timegroup-plugin",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 6,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select __time__ - __time__ % 30 as time, level, count(*) as count group by time, level order by time limit 6",
+            "insertedSQL": "1,67, from \"{logstore}\" ",
+            "keys": [
+              "time",
+              "level",
+              "count"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "isAccurate": true,
+            "columnTypes": [
+              "long",
+              "varchar",
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "time": "1793842020",
+              "level": "INFO",
+              "count": "37",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "time": "1793842020",
+              "level": "ERROR",
+              "count": "3",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "time": "1793842020",
+              "level": "WARN",
+              "count": "11",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "time": "1793842050",
+              "level": "ERROR",
+              "count": "3",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "time": "1793842050",
+              "level": "WARN",
+              "count": "10",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "time": "1793842050",
+              "level": "INFO",
+              "count": "49",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "max-time",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 2529,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select max(__time__) - min(__time__) as span",
+            "insertedSQL": "1,45, from \"{logstore}\" ",
+            "keys": [
+              "span"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "long"
+            ]
+          },
+          "data": [
+            {
+              "span": "1199",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "concat-pipes",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 100,
+            "progress": "Complete",
+            "processedRows": 127,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level || '/' || service as p order by __time__, msg limit 1",
+            "insertedSQL": "1,14, from \"{logstore}\" ",
+            "keys": [
+              "level"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar"
+            ]
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "ERROR",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

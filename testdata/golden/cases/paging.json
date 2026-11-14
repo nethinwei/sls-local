@@ -1,0 +1,14 @@
+[
+{"name": "asc-first", "op": "logs", "query": "*", "line": 20},
+{"name": "asc-offset", "op": "logs", "query": "*", "line": 20, "offset": 20},
+{"name": "desc-first", "op": "logs", "query": "*", "line": 20, "reverse": true},
+{"name": "desc-offset", "op": "logs", "query": "*", "line": 20, "offset": 20, "reverse": true},
+{"name": "same-second-asc", "op": "logs", "query": "*", "from": 97, "to": 98, "line": 20},
+{"name": "same-second-desc", "op": "logs", "query": "*", "from": 97, "to": 98, "line": 20, "reverse": true},
+{"name": "default-line", "op": "logs", "query": "service: auth"},
+{"name": "line-over-100", "op": "logs", "query": "service: auth", "line": 150},
+{"name": "offset-past-end", "op": "logs", "query": "*", "line": 5, "offset": 100000},
+{"name": "window-end-exclusive", "op": "logs", "query": "*", "from": 100, "to": 101, "line": 20},
+{"name": "window-empty", "op": "logs", "query": "*", "from": 5000, "to": 5100, "line": 5},
+{"name": "from-after-to", "op": "logs", "query": "*", "from": 100, "to": 50, "line": 5}
+]

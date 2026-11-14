@@ -1,0 +1,7 @@
+[
+{"name": "index", "op": "index"},
+{"name": "logstore", "op": "logstore"},
+{"name": "shards", "op": "shards"},
+{"name": "cursor-begin", "op": "cursor", "cursor": "begin"},
+{"name": "cursor-end", "op": "cursor", "cursor": "end"}
+]

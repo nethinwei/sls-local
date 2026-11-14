@@ -1,0 +1,601 @@
+{
+  "base": 1793842027,
+  "logstoreLen": 13,
+  "recordedAt": "2026-11-14",
+  "results": [
+    {
+      "name": "index",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "index_mode": "v2",
+          "keys": {
+            "amount": {
+              "doc_value": true,
+              "type": "double",
+              "alias": ""
+            },
+            "code": {
+              "caseSensitive": true,
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "chn": false
+            },
+            "ctx": {
+              "doc_value": true,
+              "index_all": true,
+              "json_keys": {
+                "flag": {
+                  "doc_value": true,
+                  "type": "text",
+                  "alias": ""
+                },
+                "user.id": {
+                  "doc_value": true,
+                  "type": "long",
+                  "alias": ""
+                },
+                "user.tier": {
+                  "doc_value": true,
+                  "type": "text",
+                  "alias": ""
+                }
+              },
+              "max_depth": 3,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "json",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "elapsed_ms": {
+              "doc_value": true,
+              "type": "double",
+              "alias": ""
+            },
+            "error": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "http_status": {
+              "doc_value": true,
+              "type": "long",
+              "alias": ""
+            },
+            "latency_ms": {
+              "doc_value": true,
+              "type": "long",
+              "alias": ""
+            },
+            "level": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "msg": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "order_id": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "qty": {
+              "doc_value": true,
+              "type": "long",
+              "alias": ""
+            },
+            "ratio": {
+              "doc_value": true,
+              "type": "double",
+              "alias": ""
+            },
+            "remark": {
+              "chn": true,
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false
+            },
+            "rows": {
+              "doc_value": true,
+              "type": "long",
+              "alias": ""
+            },
+            "service": {
+              "alias": "svc",
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "sku": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "span_id": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "timeout_ms": {
+              "doc_value": true,
+              "type": "long",
+              "alias": ""
+            },
+            "trace_id": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "upstream": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "url": {
+              "doc_value": false,
+              "token": [
+                "/",
+                "?",
+                "&",
+                "="
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            },
+            "user_id": {
+              "doc_value": true,
+              "token": [
+                ",",
+                " ",
+                "'",
+                "\"",
+                ";",
+                "=",
+                "(",
+                ")",
+                "[",
+                "]",
+                "{",
+                "}",
+                "?",
+                "@",
+                "&",
+                "<",
+                ">",
+                "/",
+                ":",
+                "\n",
+                "\t",
+                "\r"
+              ],
+              "type": "text",
+              "alias": "",
+              "caseSensitive": false,
+              "chn": false
+            }
+          },
+          "lastModifyTime": 0,
+          "lastUserModifyTime": 0,
+          "line": {
+            "caseSensitive": false,
+            "chn": false,
+            "token": [
+              ",",
+              " ",
+              "'",
+              "\"",
+              ";",
+              "=",
+              "(",
+              ")",
+              "[",
+              "]",
+              "{",
+              "}",
+              "?",
+              "@",
+              "&",
+              "<",
+              ">",
+              "/",
+              ":",
+              "\n",
+              "\t",
+              "\r"
+            ]
+          },
+          "storage": "pg",
+          "ttl": 30
+        }
+      }
+    },
+    {
+      "name": "logstore",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "logstoreName": "{logstore}",
+          "ttl": 30,
+          "shardCount": 1,
+          "enable_tracking": false,
+          "autoSplit": false,
+          "maxSplitShard": 0,
+          "createTime": 0,
+          "lastModifyTime": 0,
+          "archiveSeconds": 0,
+          "appendMeta": false,
+          "telemetryType": "",
+          "mode": "standard",
+          "resourceGroupId": "{resourceGroupId}",
+          "enableModify": false,
+          "resourceQuota": {
+            "storage": {
+              "preserved": -1,
+              "used": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "shards",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "shardID": 0,
+            "status": "readwrite",
+            "inclusiveBeginKey": "00000000000000000000000000000000",
+            "exclusiveEndKey": "ffffffffffffffffffffffffffffffff",
+            "createTime": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "cursor-begin",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "cursor": "{cursor}"
+        }
+      }
+    },
+    {
+      "name": "cursor-end",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "cursor": "{cursor}"
+        }
+      }
+    }
+  ]
+}

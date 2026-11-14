@@ -1,0 +1,10 @@
+[
+{"name": "mid-3-3", "op": "context", "query": "service: inventory", "from": 600, "to": 1200, "back": 3, "forward": 3},
+{"name": "forward-only", "op": "context", "query": "service: checkout", "from": 300, "to": 1200, "back": 0, "forward": 10},
+{"name": "back-only", "op": "context", "query": "service: auth", "from": 300, "to": 1200, "back": 10, "forward": 0},
+{"name": "cross-pack-50", "op": "context", "query": "level: ERROR", "from": 600, "to": 1200, "back": 50, "forward": 50},
+{"name": "over-100", "op": "context", "query": "service: inventory", "from": 600, "to": 1200, "back": 150, "forward": 150},
+{"name": "at-start", "op": "context", "query": "*", "back": 5, "forward": 5},
+{"name": "at-end", "op": "context", "query": "*", "back": 5, "forward": 5, "reverse": true},
+{"name": "zero-zero", "op": "context", "query": "*", "back": 0, "forward": 0}
+]

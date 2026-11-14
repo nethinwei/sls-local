@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -83,10 +84,28 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 type QueryError struct{ Err error }
 
 // Error 只取 DuckDB 报错的第一行：后面的 "LINE n: ..." 是 sls-local 改写后的内部 SQL，对用户没有意义。
+// 翻译器用 error('SLS_ERROR:...') 抛出的错误原样返回；能对应上的 DuckDB 错误换成 SLS 的文案。
 func (e *QueryError) Error() string {
 	msg, _, _ := strings.Cut(e.Err.Error(), "\n")
-	return "invalid query: " + strings.TrimSpace(msg)
+	msg = strings.TrimSpace(msg)
+	if _, raw, ok := strings.Cut(msg, slsErrorMarker); ok {
+		return raw
+	}
+	if m := castError.FindStringSubmatch(msg); m != nil {
+		typ := map[string]string{"INT64": "BIGINT", "INT32": "INTEGER", "INT16": "SMALLINT", "INT8": "TINYINT"}[m[2]]
+		if typ == "" {
+			typ = m[2]
+		}
+		return "ErrorType:SyntaxError.ErrorMessage:Can not cast '" + m[1] + "' to " + typ
+	}
+	return "invalid query: " + msg
 }
+
+// slsErrorMarker 标记翻译器生成的运行时错误（见 internal/presto），其后是 SLS 的原文。
+const slsErrorMarker = "SLS_ERROR:"
+
+var castError = regexp.MustCompile(`^Conversion Error: Could not convert string '(.*)' to ([A-Z0-9]+)`)
+
 func (e *QueryError) Unwrap() error { return e.Err }
 
 func queryError(err error) error {

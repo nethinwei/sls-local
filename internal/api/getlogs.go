@@ -33,7 +33,7 @@ func (s *Server) getLogs(w http.ResponseWriter, r *http.Request, project string)
 	if !s.requireLogstore(w, r, project, logstore) {
 		return
 	}
-	plan, err := query.Parse(req.Query, s.index(project, logstore))
+	plan, err := query.ParseFor(req.Query, s.index(project, logstore), logstore)
 	if err != nil {
 		s.failQuery(w, r, err)
 		return

@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/apache/arrow-go/v18 v18.5.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/duckdb/duckdb-go-bindings v0.10506.0 // indirect

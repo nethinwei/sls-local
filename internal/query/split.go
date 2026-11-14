@@ -28,7 +28,29 @@ func Split(q string) (search, rest string) {
 	return strings.TrimSpace(q), ""
 }
 
-var sqlStart = regexp.MustCompile(`(?i)^\|\s*(select\b|set\s+session\b)`)
+var sqlStart = regexp.MustCompile(`(?i)^\|\s*(select\b|with\b|set\s+session\b)`)
+
+// sqlPart 是 SQL 管道的文本：从第一个 "|" 之后到下一个引号外的 "|" 为止。SLS 也是先按 "|" 切分再解析 SQL，
+// 所以 SQL 里写 a || b 时只有 "|" 之前的部分生效（实测 select level || '/' || service 返回的是 level）。
+func sqlPart(rest string) string {
+	s := rest[1:]
+	var quote bool
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case quote:
+			if c == '\\' {
+				i++
+			} else if c == '"' {
+				quote = false
+			}
+		case c == '"':
+			quote = true
+		case c == '|':
+			return s[:i]
+		}
+	}
+	return s
+}
 
 // IsSQL 判断语句是否带 SQL 部分：第一个引号外的管道以 select（或 set session ...; select）开头。
 func IsSQL(q string) bool {

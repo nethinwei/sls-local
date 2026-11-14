@@ -21,7 +21,10 @@ type Plan struct {
 }
 
 // Parse 按索引 ix 解析一条语句：检索、检索 | SPL，或检索 | SQL。
-func Parse(q string, ix *index.Index) (*Plan, error) {
+func Parse(q string, ix *index.Index) (*Plan, error) { return ParseFor(q, ix, "log") }
+
+// ParseFor 与 Parse 相同，logstore 是查询的 logstore 名（SQL 报错的列号与它的长度有关）。
+func ParseFor(q string, ix *index.Index, logstore string) (*Plan, error) {
 	search, rest := Split(q)
 	where, err := Search(search, ix)
 	if err != nil {
@@ -29,7 +32,11 @@ func Parse(q string, ix *index.Index) (*Plan, error) {
 	}
 	p := &Plan{Search: search, Where: where}
 	if sqlStart.MatchString(rest) {
-		p.SQL, err = TranslateSQL(rest[1:], ix)
+		if sqlEngine == "antlr" {
+			p.SQL, err = translatePresto(sqlPart(rest), ix, logstore)
+		} else {
+			p.SQL, err = TranslateSQL(rest[1:], ix)
+		}
 		if err != nil {
 			return nil, err
 		}

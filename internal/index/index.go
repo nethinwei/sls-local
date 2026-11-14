@@ -27,8 +27,9 @@ type Index struct {
 	Auto bool
 	Raw  *sls.Index // 配置原文，GetIndex 原样返回；Auto 时为 nil
 
-	Line *Field // 全文索引，nil 表示未开启
-	keys map[string]*Field
+	Line    *Field // 全文索引，nil 表示未开启
+	keys    map[string]*Field
+	aliases map[string]*Field // 字段别名（小写）：只在 SQL 里可用
 }
 
 // Auto 返回自动索引。
@@ -42,7 +43,7 @@ func defaultText(name string) *Field {
 
 // FromConfig 由 SLS 格式的索引配置构建索引。
 func FromConfig(raw *sls.Index) *Index {
-	ix := &Index{Raw: raw, keys: map[string]*Field{}}
+	ix := &Index{Raw: raw, keys: map[string]*Field{}, aliases: map[string]*Field{}}
 	if raw.Line != nil {
 		ix.Line = &Field{Type: "text", Tokens: tokens(raw.Line.Token), CaseSensitive: raw.Line.CaseSensitive}
 	}
@@ -63,6 +64,9 @@ func FromConfig(raw *sls.Index) *Index {
 			}
 		}
 		ix.keys[strings.ToLower(name)] = f
+		if k.Alias != "" {
+			ix.aliases[strings.ToLower(k.Alias)] = f
+		}
 	}
 	return ix
 }
@@ -98,9 +102,21 @@ func (ix *Index) Lookup(key string) (f *Field, path []string, ok bool) {
 			continue
 		}
 		if sf, ok := parent.sub[lower[i+1:]]; ok {
+			// 子键 user.id 是嵌套路径 user → id
 			return &Field{Name: parent.Name, Type: sf.Type, Tokens: sf.Tokens, CaseSensitive: sf.CaseSensitive,
-				DocValue: sf.DocValue}, []string{sf.Name}, true
+				DocValue: sf.DocValue}, strings.Split(sf.Name, "."), true
 		}
+	}
+	return nil, nil, false
+}
+
+// LookupSQL 是 SQL 里的字段查找：除了 Lookup 的规则，还认索引里配置的字段别名。
+func (ix *Index) LookupSQL(key string) (f *Field, path []string, ok bool) {
+	if f, path, ok := ix.Lookup(key); ok {
+		return f, path, true
+	}
+	if f, ok := ix.aliases[strings.ToLower(key)]; ok {
+		return f, nil, true
 	}
 	return nil, nil, false
 }

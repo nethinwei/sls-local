@@ -109,12 +109,43 @@
 | `from log, log` / 其他表名 | 404 LogStoreNotExist `logstore (log) is not found` |
 | `where cost_ms > '100'`（bigint 与 varchar） | 400 `'>' cannot be applied to bigint, varchar(3)` |
 
+# SQL 对照（golden，2026-11-14）
+
+以下来自 golden 对照测试（docs/golden.md）：同一份合成数据写进云端与 sls-local，逐条比对响应。
+
+## 解析与改写
+
+- SQL 是 Presto 方言，语法错误是 ANTLR 的原文（`mismatched input 'offset' expecting <EOF>`）；不支持 `OFFSET`。
+- SLS 先按 `|` 切分语句再解析 SQL：`select a || b` 只有 `|` 之前的部分生效（实测 `select level || '/' || service` 返回的是 `level`）。
+- SLS 把 SQL 改写后再交给 Presto：`from log` 换成 `from "<logstore>"`；原文里没有 `from` 这个词时，在最外层第一个 select 的列表之后插入 ` from "<logstore>" `，位置记在 `meta.insertedSQL`（`1,<位置>, from "<logstore>" `）。判断「有没有 from」看的是原文，`extract(hour from ts)` 里的也算：这时不插入，`select extract(hour from from_unixtime(0))` 只返回 1 行。
+- 报错的列号：语法错误按改写后的文本；语义错误（类型不匹配、函数不存在）的 `ErrorPosition` 按原文、消息里的列号按改写后的文本（`ErrorPosition,line:1,column:40.ErrorMessage:line 1:62: '>' cannot be applied to bigint, varchar(3)`）。
+- `where` 里写 `__time__` 条件会覆盖请求的时间范围（`* | where __time__ > 0` 查的是整个 logstore）。
+- 不带 FROM 的 `* | select count(*)` 走统计快速路径，结果可能比实际少；`count(1)`、`from log`、加 group by 时精确。
+
+## 名字
+
+- 字段名不区分大小写；索引里配置的别名（alias）在 SQL 里可用。
+- 有字段索引但没开统计的字段：SQL 里能引用，值总是 null；没有字段索引的字段报 `Column ... cannot be resolved`。
+- `log.level` 不是限定名，被当成一个字段名（`Column 'log.level' cannot be resolved`）。
+- JSON 字段的子键 `"ctx.user.id"` 按嵌套路径取值，类型按 json_keys 的配置；字段值不是合法 JSON 时为 null。
+- 不写别名的列：单个字段引用用字段名，其他是 `_colN`。group by、having、order by 可以引用 select 的别名。
+
+## 类型与格式
+
+- 列类型：顶层的整数都是 `long`，数组与 map 里保留宽度（`array(integer)`、`map(varchar,bigint)`）；字符串字面量与由它算出的结果带长度，按 Presto 函数签名的长度公式（`lower('AbC')` → `varchar(3)`、`replace(x, y, z)` → `varchar(x+z·(x+1))`、`url_encode(x)` → `varchar(12x)`）；null 字面量是 `unknown`；`corr(bigint, bigint)` 是 `real`；`json_extract` 是 `json`，值是 JSON 原文。
+- double 的文本：Grisu2 生成数字且不做末位修正，得到的是能还原成同一个 double 的数字串，但不一定是离真值最近的（`0.1+0.2` → `0.30000000000000007`，`341256/1056.0` → `323.15909090909096`）。
+- 结果里已有 `__time__` 列时，行尾的 `__time__` 改名为 `__time___0`；已有 `__source__` 列时不再追加 `__source__`。
+- `1/0` 报 `/ by zero`；`cast('a' as bigint)` 报 `ErrorType:SyntaxError.ErrorMessage:Can not cast 'a' to BIGINT`。
+- `url_encode` 把空格编码成 `+`；`geometric_mean` 遇到负数是 `NaN`；`at time zone 'UTC'` 的类型是 `timestamp with time zone`，值形如 `2026-11-14 13:15:00.000 UTC`。
+
 # 已知差异（sls-local 与真实 SLS）
 
-- **bigint 与字符串字面量比较**：SLS 报类型错误，DuckDB 把字面量隐式转换后照常执行。
-- **decimal 字面量**：`0.1+0.2` 在 DuckDB 是精确的 `0.3`，SLS 按 double 得 `0.30000000000000007`；null 字面量的类型是 `long` 而不是 `unknown`。
-- **报错文案**：上表之外的执行错误是 DuckDB 的原文（加 `invalid query: ` 前缀），不是 Presto 的原文。
-- **不支持**：`select *`、限定名 `log.level`、`time_series`、`compare` 等 SLS 特有函数、`at time zone`、`date_add` 的 Presto 参数顺序、UNION 中第二个 select 的自动列名、完整 SPL（只有 `where`）。
+逐条的差异与原因见 `testdata/golden/known-diffs.json`。主要的几类：
+
+- **SQL 估算函数**：`approx_distinct`（HyperLogLog）、`approx_percentile`（qdigest）在 sls-local 上是精确值；`numeric_histogram`、`compare`、`ip_to_*` 未实现。
+- **哈希顺序**：`array_agg`、`map_agg`、`histogram` 结果里元素的顺序，以及 order by 并列行的顺序，与 Presto 的内部顺序不同。
+- **time_series** 不补齐没有数据的桶；`at time zone` 只支持 `'UTC'`。
+- **SPL** 只有 `where`；`extend`、`project`、`parse-json` 等未实现。
 - **自动索引**（没有配置索引）时所有字段都是 varchar：数值统计要写 `cast`，或在配置里声明 long/double。
 - **全文索引的 include_keys/exclude_keys** 不生效；没有全文索引时的报错文案未与真实 SLS 对照。
 - **直方图间隔**超过 7 天跨度时的档位是外推的。

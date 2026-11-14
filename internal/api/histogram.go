@@ -39,7 +39,7 @@ func (s *Server) getHistograms(w http.ResponseWriter, r *http.Request, project s
 		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", "from and to must be unix seconds with from <= to")
 		return
 	}
-	plan, err := query.Parse(q.Get("query"), s.index(project, logstore))
+	plan, err := query.ParseFor(q.Get("query"), s.index(project, logstore), logstore)
 	if err == nil && plan.SQL != nil {
 		err = fmt.Errorf("GetHistograms with SQL: %w", query.ErrUnsupported)
 	}

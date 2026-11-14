@@ -2,7 +2,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 IMAGE   ?= sls-local
 
-.PHONY: help build test lint run image image-multi licenses clean
+.PHONY: help build test golden lint run image image-multi licenses clean
 
 help: ## 显示帮助
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -13,9 +13,12 @@ build: ## 编译到 bin/sls-local（需要 cgo）
 test: ## 运行全部测试（含竞态检测）
 	go test -race ./...
 
+golden: ## 只跑与真实 SLS 的对照测试（docs/golden.md）
+	go test ./internal/golden -run TestGolden -v -count=1 | grep -E '^(---|===|ok|FAIL)|cases match' | grep -v '^=== RUN' | tail -40
+
 lint: ## gofmt 与 go vet
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "需要 gofmt：$$unformatted"; exit 1; fi
-	go vet ./...
+	go vet $$(go list ./... | grep -v /internal/presto/parser) # parser 是 ANTLR 生成的代码
 
 run: build ## 本机运行：HTTP :8080、HTTPS :8443，数据在 bin/sls.duckdb（LoongCollector 只走 443，采集请用容器）
 	bin/sls-local -data bin/sls.duckdb -https :8443 -logstore demo/app

@@ -23,6 +23,10 @@ import (
 type SQLStmt struct {
 	SQL  string
 	Args []any
+	// InsertAt 是没写 FROM 时 SLS 插入 " from <logstore>" 的位置（只有 antlr 翻译器提供，否则为 0）
+	InsertAt int
+	// Types 是翻译器推断出的列类型（SLS 的写法），为空的列用 DuckDB 的类型
+	Types []string
 	// funcPos 记录每个函数名第一次出现的列号（从 1 起，相对于 "|" 之后的文本），DuckDB 报函数不存在时用它
 	// 拼出 SLS 格式的报错。
 	funcPos map[string]int

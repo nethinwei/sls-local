@@ -40,23 +40,19 @@ sls-local 的目标是：**SLS 的客户端（SDK、LoongCollector、Grafana 数
 
 ## SQL
 
-支持的写法：`select … [from log] [where] [group by] [having] [order by] [limit]`、子查询、窗口函数、`set session …;` 前缀。没写 FROM 时默认 `from log`，没写 LIMIT 时返回 100 行。字段类型按索引（long → bigint、double → double、text → varchar），只能用开启统计（doc_value）的字段。
+语法是 Presto 的（用 prestodb 的 SqlBase.g4 解析），翻译成 DuckDB 执行。支持 `select … [from log] [where] [group by] [having] [order by] [limit]`、子查询、`with`、`union`/`intersect`/`except`、join、窗口函数、`filter (where …)`、`set session …;` 前缀。没写 FROM 时按 SLS 的规则补 `from log`，没写 LIMIT 时返回 100 行。字段类型按索引（long → bigint、double → double、text → varchar），没开统计的字段值是 null，索引别名可用。
 
-| SLS 函数 | 实现 |
+| 类别 | 函数 |
 |---|---|
-| `from_unixtime`、`to_unixtime`、`now()`、`current_timestamp`、`current_date` | 按 `-sql-utc-offset`（默认东八区）返回不带时区的本地时间 |
-| `date_format`、`date_parse` | MySQL 风格格式串（`%Y-%m-%d %H:%i:%s`）转换后交给 DuckDB |
-| `date_trunc`、`date_diff`、`extract` | DuckDB 同名函数 |
-| `approx_percentile`、`approx_distinct` | DuckDB `approx_quantile`、`approx_count_distinct` |
-| `regexp_like`、`json_extract_scalar`、`cardinality` | DuckDB `regexp_matches`、`json_extract_string`、`len` |
-| `count`、`sum`、`avg`、`min`、`max`、`count_if`、`arbitrary`、`max_by`、`min_by`、`if`、`coalesce`、`round`、`split_part`、`strpos`、`regexp_extract`、`lower`、`upper`、`length`、`concat`、`cast`、`try_cast` | DuckDB 同名函数 |
-| `time_series`、`compare`、`histogram`、`ip_to_*` 等 SLS 特有函数 | ❌ 报 `Function … not registered` |
-| `select *`、`log.level` 限定名、`at time zone`、Presto 参数顺序的 `date_add` | ❌ |
+| 聚合 | `count`、`count_if`、`sum`、`avg`、`min`、`max`、`arbitrary`、`max_by`、`min_by`、`bool_and`、`bool_or`、`stddev`、`variance` 等、`corr`、`covar_*`、`regr_*`、`geometric_mean`、`histogram`、`array_agg`、`map_agg`、`approx_distinct`（精确值）、`approx_percentile`（离散分位数） |
+| 窗口 | `row_number`、`rank`、`dense_rank`、`percent_rank`、`cume_dist`、`ntile`、`lag`、`lead`、`first_value`、`last_value`、`nth_value` |
+| 时间 | `from_unixtime`、`to_unixtime`、`now`、`current_timestamp`、`current_date`、`date_format`、`date_parse`、`date_trunc`、`date_diff`、`date_add`、`extract`、`year` … `second`、`day_of_week`、`day_of_year`、`time_series`（不补空桶）、`at time zone 'UTC'`；时间参数也可以直接给 Unix 秒 |
+| 字符串 | `lower`、`upper`、`length`、`substr`、`concat`、`replace`、`reverse`、`trim`、`lpad`、`rpad`、`strpos`、`position`、`split`、`split_part`、`starts_with`、`regexp_like`、`regexp_extract`、`regexp_extract_all`、`regexp_replace`、`url_extract_*`、`url_encode`、`url_decode`、`to_utf8`、`from_utf8`、`md5`、`to_hex`、`to_base64`、`from_base64` |
+| JSON | `json_extract`、`json_extract_scalar`、`json_array_length`、`json_size`、`json_parse`、`json_format`（字段值不是合法 JSON 时为 null） |
+| 数组与 map | `array[…]`、`cardinality`、`contains`、`element_at`、`array_join`、`array_distinct`、`array_max`、`array_min`、`array_sort`、`array_position`、`slice`、`sequence`、`filter`、`transform`、`map`、`map_keys`、`map_values` |
+| 数学与条件 | `abs`、`ceil`、`floor`、`round`、`sqrt`、`power`、`mod`、`ln`、`log2`、`log10`、三角函数、`greatest`、`least`、`if`、`coalesce`、`nullif`、`try`、`typeof`、`cast`、`try_cast` |
+| 未实现 | `compare`、`ip_to_*`、`numeric_histogram`、其他 SLS 特有函数（报 `Function … not registered`）；`select *`（log 上）、`grouping sets`、`rollup`、`cube` |
 
 ## 已知差异
 
-- bigint 与字符串字面量比较（`cost_ms > '100'`）：SLS 报类型错误，sls-local 照常执行。
-- decimal 字面量按精确值计算（`0.1+0.2` 得 `0.3`，SLS 得 `0.30000000000000007`）；null 字面量的列类型是 `long` 而不是 `unknown`。
-- 上面对照过的报错之外，执行错误的文案来自 DuckDB（加 `invalid query: ` 前缀）。
-- 自动索引时所有字段都是 varchar，数值统计要 `cast` 或在配置里声明 long / double。
-- 没有全文索引时的报错文案未与真实 SLS 对照。
+逐条见 `testdata/golden/known-diffs.json`，概要见 [wire-findings.md](wire-findings.md) 末尾。

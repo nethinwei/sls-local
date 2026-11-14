@@ -28,8 +28,9 @@ jobs:
             echo "Run gofmt on:"; echo "$unformatted"; exit 1
           fi
 
+      # internal/presto/parser 是 ANTLR 生成的代码，不做 vet
       - name: go vet
-        run: go vet ./...
+        run: go vet $(go list ./... | grep -v /internal/presto/parser)
 
       # 端到端测试用官方 SDK 当客户端，期望值来自真实 SLS 的行为（docs/wire-findings.md）
       - name: go test

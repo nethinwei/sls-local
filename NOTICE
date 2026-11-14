@@ -26,11 +26,21 @@ into the binary are shipped in the image under /usr/share/doc/sls-local/licenses
 
   github.com/aliyun/aliyun-log-go-sdk   MIT License, Copyright (c) 2017 Alibaba Cloud
                                         (protocol buffer definitions and client used in tests)
+  github.com/antlr4-go/antlr/v4         BSD 3-Clause License, Copyright (c) 2012-2023 The ANTLR Project
   github.com/duckdb/duckdb-go/v2        MIT License, Copyright Marc Boeker and
                                         Stichting DuckDB Foundation (bundles DuckDB, MIT License)
   github.com/klauspost/compress         BSD 3-Clause License
   github.com/pierrec/lz4/v4             BSD 3-Clause License, Copyright (c) 2015 Pierre Curto
   sigs.k8s.io/yaml                      MIT License and BSD 3-Clause License
+
+internal/presto/grammar/SqlBase.g4 is copied unmodified from prestodb/presto 0.290
+(presto-parser), Apache License 2.0, Copyright (c) Facebook, Inc. and its affiliates. The Go code
+in internal/presto/parser is generated from it by ANTLR 4.13.1.
+
+internal/store/dtoa.go implements the Grisu2 algorithm (Florian Loitsch, "Printing Floating-Point
+Numbers Quickly and Accurately with Integers", PLDI 2010) following the structure of RapidJSON's
+internal/dtoa.h and internal/diyfp.h, MIT License, Copyright (C) 2015 THL A29 Limited, a Tencent
+company, and Milo Yip.
 
 testdata/plugin/filter-syntax.json is copied from nethinwei/sls-grafana-datasource (MIT License),
 so that both projects test the same query syntax cases.

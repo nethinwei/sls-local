@@ -29,6 +29,9 @@ type SQLResult struct {
 func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt) (*SQLResult, error) {
 	base, baseArgs := p.where()
 	q := query.CTE(base) + stmt.SQL
+	if rest, ok := strings.CutPrefix(stmt.SQL, "WITH "); ok { // 语句自己的 WITH 与 log 合并成一个
+		q = strings.TrimSuffix(query.CTE(base), " ") + ", " + rest
+	}
 	rows, err := s.db.QueryContext(ctx, q, append(baseArgs, stmt.Args...)...)
 	if err != nil {
 		return nil, sqlError(stmt, err)
@@ -43,15 +46,23 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 	for i, ct := range cts {
 		res.Keys = append(res.Keys, ct.Name())
 		dbTypes[i] = ct.DatabaseTypeName()
-		res.Types = append(res.Types, slsType(dbTypes[i]))
-	}
-	// SLS 在每行最后多带 __source__ 与 __time__（不在 keys 里；结果里已有同名列时不再重复），照抄
-	var tail strings.Builder
-	for _, kv := range [][2]string{{"__source__", ""}, {"__time__", strconv.FormatInt(p.From, 10)}} {
-		if !slices.Contains(res.Keys, kv[0]) {
-			tail.WriteString(`,"` + kv[0] + `":"` + kv[1] + `"`)
+		t := slsType(dbTypes[i])
+		if i < len(stmt.Types) && stmt.Types[i] != "" { // 翻译器推断出的类型更准（varchar(n)、unknown 等）
+			t = stmt.Types[i]
 		}
+		res.Types = append(res.Types, t)
 	}
+	// SLS 在每行最后多带 __source__ 与 __time__（不在 keys 里）。结果里已有 __source__ 列时不再重复；
+	// 已有 __time__ 列时改名为 __time___0（实测如此）
+	var tail strings.Builder
+	if !slices.Contains(res.Keys, "__source__") {
+		tail.WriteString(`,"__source__":""`)
+	}
+	timeKey := "__time__"
+	if slices.Contains(res.Keys, timeKey) {
+		timeKey = "__time___0"
+	}
+	tail.WriteString(`,"` + timeKey + `":"` + strconv.FormatInt(p.From, 10) + `"`)
 	tail.WriteByte('}')
 	vals := make([]any, len(cts))
 	ptrs := make([]any, len(cts))
@@ -98,11 +109,11 @@ func sqlError(stmt *query.SQLStmt, err error) error {
 // slsType 把 DuckDB 的类型名换成 SLS 返回的列类型名。
 func slsType(t string) string {
 	if elem, ok := strings.CutSuffix(t, "[]"); ok {
-		inner := slsType(elem)
-		if inner == "long" {
-			inner = "bigint"
-		}
-		return "array(" + inner + ")"
+		return "array(" + elemType(elem) + ")"
+	}
+	if inner, ok := strings.CutPrefix(t, "MAP("); ok && strings.HasSuffix(inner, ")") {
+		k, v, _ := strings.Cut(inner[:len(inner)-1], ", ")
+		return "map(" + elemType(k) + "," + elemType(v) + ")"
 	}
 	switch {
 	case t == "BIGINT", t == "INTEGER", t == "SMALLINT", t == "TINYINT", t == "HUGEINT",
@@ -114,6 +125,17 @@ func slsType(t string) string {
 		return "timestamp"
 	}
 	return strings.ToLower(t)
+}
+
+// elemType 是数组、map 里的元素类型名：与顶层不同，整数保留具体宽度（array(integer)、map(varchar,bigint)）。
+func elemType(t string) string {
+	switch t {
+	case "INTEGER", "SMALLINT", "TINYINT":
+		return "integer"
+	case "BIGINT", "UBIGINT", "UINTEGER", "HUGEINT":
+		return "bigint"
+	}
+	return slsType(t)
 }
 
 // formatValue 按 SLS 的写法把一个值转成字符串。
@@ -160,7 +182,7 @@ func formatValue(v any, dbType string) string {
 	return string(b)
 }
 
-// formatFloat 与 SLS 一致：不用科学计数法，整数值补 ".0"（1 → "1.0"，1e20 → "100000000000000000000.0"）。
+// formatFloat 与 SLS 一致：Grisu2 生成数字（dtoa.go），整数值补 ".0"（1 → "1.0"，1e20 → "100000000000000000000.0"）。
 func formatFloat(f float64) string {
 	switch {
 	case math.IsNaN(f):
@@ -170,9 +192,5 @@ func formatFloat(f float64) string {
 	case math.IsInf(f, -1):
 		return "-Infinity"
 	}
-	s := strconv.FormatFloat(f, 'f', -1, 64)
-	if !strings.Contains(s, ".") {
-		s += ".0"
-	}
-	return s
+	return formatGrisu(f)
 }

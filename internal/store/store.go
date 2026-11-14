@@ -89,7 +89,8 @@ func macros(offsetSec int64) string {
 	return `CREATE OR REPLACE TEMP MACRO sls_from_unixtime(x) AS
 	make_timestamp(CAST(round(CAST(x AS DOUBLE) * 1000000) AS BIGINT)) + to_seconds(` + off + `);
 CREATE OR REPLACE TEMP MACRO sls_to_unixtime(ts) AS CAST(epoch(ts) AS DOUBLE) - ` + off + `;
-CREATE OR REPLACE TEMP MACRO sls_now() AS make_timestamp(epoch_us(get_current_timestamp())) + to_seconds(` + off + `);`
+CREATE OR REPLACE TEMP MACRO sls_now() AS make_timestamp(epoch_us(get_current_timestamp())) + to_seconds(` + off + `);
+CREATE OR REPLACE TEMP MACRO sls_utc(ts) AS ts - to_seconds(` + off + `);`
 }
 
 // Open 打开（或创建）path 上的数据库。path 为空时使用内存库（测试用）。

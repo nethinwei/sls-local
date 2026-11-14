@@ -44,3 +44,34 @@ func TestFulltextFieldBoundary(t *testing.T) {
 		}
 	}
 }
+
+// 分词符可以是文字（如中文的「的」）：预过滤的子串不能跨过分词符。
+func TestFulltextLetterToken(t *testing.T) {
+	st, err := store.Open(context.Background(), "", store.Options{SQLOffset: store.DefaultSQLOffset})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	ix := &sls.Index{Line: &sls.IndexLine{Token: []string{" ", "的", "x"}}}
+	srv := httptest.NewServer(New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), map[string]*sls.Index{"p/ls": ix}).Handler())
+	t.Cleanup(srv.Close)
+	c := &sls.Client{Endpoint: "sls-local:80", AccessKeyID: "local", AccessKeySecret: "local"}
+	c.SetHTTPClient(&http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
+	}}})
+	g := &sls.LogGroup{Topic: ptr(""), Source: ptr("s"), Logs: []*sls.Log{{Time: ptr(uint32(base.Unix())), Contents: []*sls.LogContent{
+		{Key: ptr("msg"), Value: ptr("张三 订单 ab cd")},
+	}}}}
+	if err := c.PutLogs("p", "ls", g); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"张三的订单", `"张三的订单"`, "abxcd", "ab*xcd"} {
+		r, err := c.GetLogsV3("p", "ls", &sls.GetLogRequest{From: base.Unix() - 10, To: base.Unix() + 10, Query: q, Lines: 10})
+		if err != nil {
+			t.Fatal(q, err)
+		}
+		if len(r.Logs) != 1 {
+			t.Errorf("%q: %d logs, want 1", q, len(r.Logs))
+		}
+	}
+}

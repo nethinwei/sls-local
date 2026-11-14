@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/nethinwei/sls-local/internal/query"
 )
@@ -106,6 +108,54 @@ func TestSearchWindows(t *testing.T) {
 				}
 				if !slices.Equal(got, want) {
 					t.Fatalf("%s reverse=%v [%d.%d, %d.%d) limit=%d offset=%d\n got %v\nwant %v", c, reverse, from, fromNs, to, toNs, limit, offset, got, want)
+				}
+			}
+		}
+	}
+}
+
+// 客户端传来的时间范围可以是任意 int64：窗口不能因溢出而死循环，结果与正常范围相同。
+func TestSearchWindowsExtremeRange(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s, err := Open(ctx, "", Options{SQLOffset: DefaultSQLOffset})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ns := uint32(0)
+	if err := s.Append(ctx, "p", "l", &Group{Logs: []Log{{Time: 1_800_000_000, TimeNs: &ns, Contents: []KV{{"k", "v"}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range [][2]int64{{math.MinInt64, math.MaxInt64}, {0, math.MaxInt64}, {math.MinInt64, 1_800_000_001}, {-5, 1 << 40}} {
+		for _, reverse := range []bool{true, false} {
+			for _, cond := range []string{"TRUE", "FALSE"} {
+				res, err := s.Search(ctx, SearchParams{Project: "p", Logstore: "l", From: r[0], To: r[1], Where: query.Cond{SQL: cond},
+					Limit: 10, Offset: math.MaxInt64 / 2 * map[bool]int64{true: 0, false: 1}[cond == "TRUE"], Reverse: reverse})
+				if err != nil {
+					t.Fatal(r, err)
+				}
+				if want := map[string]int{"TRUE": 1, "FALSE": 0}[cond]; len(res.Rows) != want {
+					t.Errorf("%v reverse=%v %s: %d rows, want %d", r, reverse, cond, len(res.Rows), want)
+				}
+			}
+		}
+	}
+}
+
+func TestTimeWindowsBounded(t *testing.T) {
+	for _, r := range [][2]int64{{math.MinInt64, math.MaxInt64}, {0, 0}, {5, 4}} {
+		for _, reverse := range []bool{true, false} {
+			var w timeWindows
+			w.init(r[0], r[1], reverse)
+			steps := 0
+			for {
+				if _, _, ok := w.next(); !ok {
+					break
+				}
+				w.found(1, math.MaxInt64) // 每窗只命中 1 行、还差很多：估算值会很大
+				if steps++; steps > 200 {
+					t.Fatalf("%v reverse=%v: too many windows", r, reverse)
 				}
 			}
 		}

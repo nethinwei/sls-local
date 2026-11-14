@@ -13,6 +13,9 @@ var histogramIntervals = []int64{1, 10, 30, 60, 300, 600, 1800, 3600, 14400, 864
 
 const maxBuckets = 60
 
+// maxRequestedBuckets 是客户端指定 interval 时允许的最多桶数。
+const maxRequestedBuckets = 10000
+
 func histogramInterval(span int64) int64 {
 	for _, iv := range histogramIntervals {
 		if span <= iv*maxBuckets {
@@ -47,8 +50,11 @@ func (s *Server) getHistograms(w http.ResponseWriter, r *http.Request, project s
 		where.SQL = "(" + where.SQL + " AND topic = ?)"
 		where.Args = append(where.Args, topic)
 	}
+	// 桶在下面逐个生成，参数又来自客户端：时间收紧到 __time__ 可能的取值（uint32 秒），
+	// 指定的间隔会产生过多的桶时改用自动间隔（自动间隔在这个范围内最多约 7000 个桶）
+	from, to = min(max(from, 0), 1<<32), min(max(to, 0), 1<<32)
 	interval, _ := strconv.ParseInt(q.Get("interval"), 10, 64)
-	if interval <= 0 {
+	if interval <= 0 || (to-from)/interval > maxRequestedBuckets {
 		interval = histogramInterval(to - from)
 	}
 	counts, err := s.store.Histogram(r.Context(), project, logstore, from, to, interval, where)

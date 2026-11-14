@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -151,7 +152,10 @@ type timeWindows struct {
 	started   bool
 }
 
+// init 把窗口限定在 __time__ 可能的取值内（uint32 秒）：客户端传来的范围可以是任意 int64，不收紧的话
+// 跨度会溢出。from > to 时没有窗口。
 func (w *timeWindows) init(from, to int64, reverse bool) {
+	from, to = max(from, 0), min(to, math.MaxUint32)
 	*w = timeWindows{from: from, to: to, reverse: reverse}
 	w.size = max((to-from+1)/32, 1)
 }
@@ -164,8 +168,8 @@ func (w *timeWindows) found(n, missing int64) {
 		w.size = w.to - w.from + 1 // 没有命中时无从估算，剩下的一次查完（最坏情况只多一次小窗口查询）
 		return
 	}
-	est := w.scanned * missing / w.hits
-	w.size = max(est+est/4, w.scanned/2, 1)
+	est := float64(w.scanned) * float64(missing) / float64(w.hits) * 1.25 // 用浮点数：missing 可以很大
+	w.size = max(int64(min(est, float64(w.to-w.from+1))), w.scanned/2, 1)
 }
 
 func (w *timeWindows) next() (lo, hi int64, ok bool) {
@@ -178,6 +182,9 @@ func (w *timeWindows) next() (lo, hi int64, ok bool) {
 		}
 	}
 	size := max(w.size, 1)
+	if w.from > w.to {
+		return 0, 0, false
+	}
 	if w.reverse {
 		if w.cur < w.from {
 			return 0, 0, false

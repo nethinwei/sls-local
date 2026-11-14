@@ -1,0 +1,14 @@
+apiVersion: 1
+datasources:
+  - name: SLS
+    type: nethinwei-sls-datasource
+    uid: sls
+    access: proxy
+    isDefault: true
+    url: http://sls-local:8080 # 查询走 HTTP；插件把 project 拼进域名：demo.sls-local:8080
+    jsonData:
+      project: demo
+      logstore: app
+    secureJsonData:
+      accessKeyId: local # sls-local 不校验签名，随便填
+      accessKeySecret: local

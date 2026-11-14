@@ -1,0 +1,6 @@
+.git
+.github
+bin
+examples
+*.duckdb
+*.duckdb.wal

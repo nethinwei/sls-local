@@ -1,0 +1,76 @@
+package api
+
+import (
+	"fmt"
+	"net/http"
+	"strconv"
+
+	sls "github.com/aliyun/aliyun-log-go-sdk"
+
+	"github.com/nethinwei/sls-local/internal/query"
+)
+
+// histogramIntervals 是自动选择的分桶间隔（秒）：取使桶数不超过 60 的最小值。
+// 前 9 个与真实 SLS 实测一致（docs/wire-findings.md），更大的是外推。
+var histogramIntervals = []int64{1, 10, 30, 60, 300, 600, 1800, 3600, 14400, 86400, 604800}
+
+const maxBuckets = 60
+
+func histogramInterval(span int64) int64 {
+	for _, iv := range histogramIntervals {
+		if span <= iv*maxBuckets {
+			return iv
+		}
+	}
+	return histogramIntervals[len(histogramIntervals)-1]
+}
+
+// getHistograms 实现 GetHistograms：GET /logstores/{logstore}?type=histogram&from&to&query&topic&interval。
+// body 是桶数组，总数与进度放在 x-log-count、x-log-progress 头里（SDK 从头里取）。
+func (s *Server) getHistograms(w http.ResponseWriter, r *http.Request, project string) {
+	logstore := r.PathValue("logstore")
+	if !s.requireLogstore(w, r, project, logstore) {
+		return
+	}
+	q := r.URL.Query()
+	from, err1 := strconv.ParseInt(q.Get("from"), 10, 64)
+	to, err2 := strconv.ParseInt(q.Get("to"), 10, 64)
+	if err1 != nil || err2 != nil || to < from {
+		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", "from and to must be unix seconds with from <= to")
+		return
+	}
+	plan, err := query.Parse(q.Get("query"), s.index(project, logstore))
+	if err == nil && plan.SQL != nil {
+		err = fmt.Errorf("GetHistograms with SQL: %w", query.ErrUnsupported)
+	}
+	if err != nil {
+		s.failQuery(w, r, err)
+		return
+	}
+	where := plan.Where
+	if topic := q.Get("topic"); topic != "" {
+		where.SQL = "(" + where.SQL + " AND topic = ?)"
+		where.Args = append(where.Args, topic)
+	}
+	interval, _ := strconv.ParseInt(q.Get("interval"), 10, 64)
+	if interval <= 0 {
+		interval = histogramInterval(to - from)
+	}
+	counts, err := s.store.Histogram(r.Context(), project, logstore, from, to, interval, where)
+	if err != nil {
+		s.failQuery(w, r, err)
+		return
+	}
+	buckets := []sls.SingleHistogram{}
+	var total int64
+	for start := from; start < to; {
+		end := min((start/interval+1)*interval, to) // 边界对齐到 interval 的整数倍
+		n := counts[start-start%interval]
+		total += n
+		buckets = append(buckets, sls.SingleHistogram{Progress: "Complete", Count: n, From: start, To: end})
+		start = end
+	}
+	w.Header().Set("x-log-progress", "Complete")
+	w.Header().Set("x-log-count", strconv.FormatInt(total, 10))
+	writeJSON(w, http.StatusOK, buckets)
+}

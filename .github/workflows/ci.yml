@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt on:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # 端到端测试用官方 SDK 当客户端，期望值来自真实 SLS 的行为（docs/wire-findings.md）
+      - name: go test
+        run: go test -race ./...
+
+      - name: Every dependency has a license file
+        run: scripts/collect-go-licenses.sh "$RUNNER_TEMP/licenses"
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the image for this runner and load it
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: sls-local:ci
+          build-args: VERSION=ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          docker run --rm sls-local:ci -version
+          docker run -d --name sls -p 8080:8080 sls-local:ci -data "" -logstore demo/app
+          for i in $(seq 1 30); do
+            curl -sf -H 'Host: demo.localhost' http://127.0.0.1:8080/logstores/app >/dev/null && break
+            sleep 1
+          done
+          curl -sf -H 'Host: demo.localhost' -X POST http://127.0.0.1:8080/logstores/app/logs \
+            -d '{"from":0,"to":2000000000,"query":"* | select count(*) as c"}'
+          docker rm -f sls
+
+      # 两个架构都交叉编译一遍（不推送）
+      - name: Build every released platform
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=ci-${{ github.sha }}
+          cache-from: type=gha

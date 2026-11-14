@@ -1,0 +1,91 @@
+name: Release
+
+# 推送 v0.1.0 这样的标签：测试，构建 amd64 与 arm64 镜像推到 ghcr.io/<owner>/sls-local，
+# 再用 CHANGELOG.md 里该版本的一节发布 GitHub Release。
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write   # 创建 GitHub Release
+      packages: write   # 推送 ghcr.io 镜像
+      id-token: write   # 构建证明（provenance）
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: CHANGELOG has an entry for the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! grep -qE "^# ${TAG//./\\.} \([0-9]{4}-[0-9]{2}-[0-9]{2}\)$" CHANGELOG.md; then
+            echo "CHANGELOG.md needs a '# $TAG (YYYY-MM-DD)' heading"; exit 1
+          fi
+          awk -v tag="# $TAG (" 'index($0, tag) == 1 {on = 1; next} /^# v/ {on = 0} on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test -race ./...
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          # 预发布版本（v0.2.0-rc.1）不打 latest
+          flavor: latest=auto
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          IMAGE: ghcr.io/${{ github.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "**Image:** \`$IMAGE:${TAG#v}\` (\`linux/amd64\`, \`linux/arm64\`)"
+            echo
+            echo "Digest: \`$DIGEST\`"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          } > "$RUNNER_TEMP/release.md"
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/release.md" $prerelease

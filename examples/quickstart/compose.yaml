@@ -1,0 +1,50 @@
+# sls-local 快速上手：造日志 → LoongCollector 采集 → sls-local 存储 → Grafana（SLS 插件）查询。
+#   docker compose up -d   然后打开 http://localhost:3000 （免登录）
+#   端口被占用时：GRAFANA_PORT=3001 SLS_LOCAL_PORT=8081 docker compose up -d
+name: sls-local-quickstart
+
+services:
+  sls-local:
+    image: ${SLS_LOCAL_IMAGE:-ghcr.io/nethinwei/sls-local:0.1.0}
+    command: ["-config", "/etc/sls-local.yaml"]
+    volumes:
+      - ./sls-local.yaml:/etc/sls-local.yaml:ro
+      - sls:/data
+    ports: ["127.0.0.1:${SLS_LOCAL_PORT:-8080}:8080"] # 宿主机上用 http://demo.localhost:8080 访问 project demo
+    networks:
+      default:
+        # SLS 的 SDK 与采集器把请求发往 {project}.{endpoint}：每个 project 加一个别名
+        aliases: [demo.sls-local]
+
+  # 造日志：每秒几条 JSON 日志写到 ./logs/app.log
+  loggen:
+    image: busybox:1.37
+    command: ["sh", "/loggen.sh"]
+    volumes:
+      - ./loggen.sh:/loggen.sh:ro
+      - logs:/logs
+
+  loongcollector:
+    image: sls-opensource-registry.cn-shanghai.cr.aliyuncs.com/loongcollector-community-edition/loongcollector:3.4.1
+    volumes:
+      - logs:/logs:ro
+      - ./loongcollector/pipeline.yaml:/usr/local/loongcollector/conf/continuous_pipeline_config/local/quickstart.yaml:ro
+      - ./loongcollector/instance.json:/usr/local/loongcollector/conf/instance_config/local/loongcollector_config.json:ro
+    depends_on: [sls-local]
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: nethinwei-sls-datasource
+      GF_PLUGINS_PREINSTALL_SYNC: nethinwei-sls-datasource@0.1.0@https://github.com/nethinwei/sls-grafana-datasource/releases/download/v0.1.0/nethinwei-sls-datasource-v0.1.0.zip
+    volumes:
+      - ./grafana:/etc/grafana/provisioning:ro
+    ports: ["127.0.0.1:${GRAFANA_PORT:-3000}:3000"] # 匿名即 Admin，只绑本机
+    depends_on: [sls-local]
+
+volumes:
+  sls: {}
+  logs: {}

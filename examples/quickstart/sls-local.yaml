@@ -1,0 +1,15 @@
+# 预建 logstore 并声明索引。index 的结构与 SLS GetIndex 返回的 JSON 相同，可以直接从生产导出；
+# 省略 index 时自动为所有字段建 text 索引（数值统计需要 cast）。
+logstores:
+  - project: demo
+    logstore: app
+    index:
+      line:
+        token: [",", " ", "'", "\"", ";", "=", "(", ")", "[", "]", "{", "}", "?", "@", "&", "<", ">", "/", ":", "\n", "\t", "\r"]
+      keys:
+        level: {type: text, doc_value: true, token: [" "]}
+        msg: {type: text, doc_value: true, token: [",", " ", "'", "\"", ";", "=", "(", ")", "[", "]", "{", "}", "?", "@", "&", "<", ">", "/", ":", "\n", "\t", "\r"]}
+        service_name: {type: text, doc_value: true, token: [" "]}
+        trace_id: {type: text, doc_value: true, token: [" "]}
+        status: {type: long, doc_value: true}
+        cost_ms: {type: long, doc_value: true}

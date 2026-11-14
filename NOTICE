@@ -1,0 +1,36 @@
+sls-local
+Copyright (c) 2026 nethinwei
+Licensed under the MIT License (see LICENSE).
+
+sls-local is an independent, local implementation of the public HTTP API of Alibaba Cloud Simple
+Log Service (SLS), meant for development and testing: SLS clients and collectors (SDKs,
+LoongCollector) write to it and SLS data sources (such as nethinwei-sls-datasource for Grafana)
+query it, without a cloud account.
+
+This project is not affiliated with, sponsored or endorsed by Alibaba Cloud. Alibaba Cloud,
+Aliyun, Simple Log Service and SLS are trademarks of Alibaba Group. They are used here only to
+describe what this software is compatible with. sls-local is not a replacement for the SLS
+service and makes no claim to match its behavior in every respect; see docs/wire-findings.md for
+the known differences.
+
+The implementation was written from the public API documentation, the open-source SLS SDKs and
+LoongCollector, and the observable behavior of the service when used through its public API. It
+contains no code of the SLS service. Error messages that clients rely on to recognize an error
+are reproduced verbatim for compatibility.
+
+Third-party software
+--------------------
+
+sls-local is built with the following Go modules. The license files of every module compiled
+into the binary are shipped in the image under /usr/share/doc/sls-local/licenses.
+
+  github.com/aliyun/aliyun-log-go-sdk   MIT License, Copyright (c) 2017 Alibaba Cloud
+                                        (protocol buffer definitions and client used in tests)
+  github.com/duckdb/duckdb-go/v2        MIT License, Copyright Marc Boeker and
+                                        Stichting DuckDB Foundation (bundles DuckDB, MIT License)
+  github.com/klauspost/compress         BSD 3-Clause License
+  github.com/pierrec/lz4/v4             BSD 3-Clause License, Copyright (c) 2015 Pierre Curto
+  sigs.k8s.io/yaml                      MIT License and BSD 3-Clause License
+
+testdata/plugin/filter-syntax.json is copied from nethinwei/sls-grafana-datasource (MIT License),
+so that both projects test the same query syntax cases.

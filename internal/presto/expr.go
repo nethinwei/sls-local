@@ -76,6 +76,9 @@ func (t *tr) predicate(p parser.IPredicateContext, left val, sc *scope, m mode) 
 		}
 		op := p.ComparisonOperator().GetText()
 		if (left.numeric() && strings.HasPrefix(r.typ, "varchar")) || (strings.HasPrefix(left.typ, "varchar") && r.numeric()) {
+			if t.resolve != nil {
+				return val{}, splSignatureError(op, left.typ, r.typ)
+			}
 			return val{}, t.semErrorf(p.ComparisonOperator().GetStart(), "'%s' cannot be applied to %s, %s", op, left.typ, r.typ)
 		}
 		if op == "!=" {
@@ -103,6 +106,9 @@ func (t *tr) predicate(p parser.IPredicateContext, left val, sc *scope, m mode) 
 		}
 		return b(not(p.NOT()) + "IN (" + strings.Join(items, ", ") + ")")
 	case *parser.InSubqueryContext:
+		if t.resolve != nil {
+			return val{}, unsupported(p)
+		}
 		sql, _, err := t.query(p.Query(), sc, false)
 		if err != nil {
 			return val{}, err
@@ -270,7 +276,7 @@ func (t *tr) primary(e parser.IPrimaryExpressionContext, sc *scope, m mode) (val
 			return val{}, errorf(e.Type_().GetStart(), "Unknown type: %s", typ)
 		}
 		fn := "CAST"
-		if e.TRY_CAST() != nil {
+		if e.TRY_CAST() != nil || t.resolve != nil { // SPL 的 cast 转换失败时是 NULL
 			fn = "TRY_CAST"
 		}
 		return val{fn + "(" + v.sql + " AS " + dt + ")", baseType(typ)}, nil
@@ -346,9 +352,15 @@ func (t *tr) primary(e parser.IPrimaryExpressionContext, sc *scope, m mode) (val
 		}
 		return val{"row(" + strings.Join(items, ", ") + ")", "row"}, nil
 	case *parser.SubqueryExpressionContext:
+		if t.resolve != nil {
+			return val{}, unsupported(e)
+		}
 		sql, _, err := t.query(e.Query(), sc, false)
 		return val{"(" + sql + ")", ""}, err
 	case *parser.ExistsContext:
+		if t.resolve != nil {
+			return val{}, unsupported(e)
+		}
 		sql, _, err := t.query(e.Query(), sc, false)
 		return val{"EXISTS (" + sql + ")", "boolean"}, err
 	case *parser.LambdaContext:
@@ -442,6 +454,10 @@ func (t *tr) column(parts []string, tok antlr.Token, quoted bool, sc *scope, m m
 	name := strings.Join(parts, ".")
 	if len(parts) == 1 && m.lambda[strings.ToLower(name)] {
 		return val{quote(name), ""}, nil
+	}
+	if t.resolve != nil {
+		sql, typ := t.resolve(name)
+		return val{sql, typ}, nil
 	}
 	output := func() (val, bool) {
 		if !m.outputs || len(parts) != 1 || sc == nil {

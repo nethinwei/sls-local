@@ -14,6 +14,7 @@ import (
 
 	"github.com/duckdb/duckdb-go/v2"
 
+	"github.com/nethinwei/sls-local/internal/presto"
 	"github.com/nethinwei/sls-local/internal/query"
 )
 
@@ -28,11 +29,22 @@ type SQLResult struct {
 // RunSQL 在 p 限定的日志（project、时间范围、检索条件）上执行改写好的 SQL。
 func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt) (*SQLResult, error) {
 	base, baseArgs := p.where()
-	q := query.CTE(base) + stmt.SQL
-	if rest, ok := strings.CutPrefix(stmt.SQL, "WITH "); ok { // 语句自己的 WITH 与 log 合并成一个
-		q = strings.TrimSuffix(query.CTE(base), " ") + ", " + rest
+	// log 与 compare 用的 log__shift_<n>（时间范围往前平移 n 秒，检索条件相同）
+	defs := []string{query.CTEDef("log", base)}
+	cteArgs := append([]any{}, baseArgs...)
+	for _, n := range stmt.Shifts {
+		sp := p
+		sp.From, sp.To = p.From-n, p.To-n
+		b, a := sp.where()
+		defs = append(defs, query.CTEDef(presto.ShiftTable(n), b))
+		cteArgs = append(cteArgs, a...)
 	}
-	rows, err := s.db.QueryContext(ctx, q, append(baseArgs, stmt.Args...)...)
+	with := "WITH " + strings.Join(defs, ", ") + " "
+	q := with + stmt.SQL
+	if rest, ok := strings.CutPrefix(stmt.SQL, "WITH "); ok { // 语句自己的 WITH 合并进来
+		q = with[:len(with)-1] + ", " + rest
+	}
+	rows, err := s.db.QueryContext(ctx, q, append(cteArgs, stmt.Args...)...)
 	if err != nil {
 		return nil, sqlError(stmt, err)
 	}
@@ -93,8 +105,13 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 	if err := rows.Err(); err != nil {
 		return nil, sqlError(stmt, err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+base, baseArgs...).Scan(&res.Processed); err != nil {
-		return nil, queryError(err)
+	if stmt.Processed != "" {
+		err = s.db.QueryRowContext(ctx, with+"SELECT "+stmt.Processed, append(cteArgs, stmt.Args...)...).Scan(&res.Processed)
+	} else {
+		err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+base, baseArgs...).Scan(&res.Processed)
+	}
+	if err != nil {
+		return nil, sqlError(stmt, err)
 	}
 	return res, nil
 }
@@ -169,6 +186,8 @@ func formatValue(v any, dbType string) string {
 			if s, ok := e.(string); ok {
 				b, _ := json.Marshal(s)
 				parts[i] = string(b)
+			} else if f, ok := e.(float64); ok && (math.IsNaN(f) || math.IsInf(f, 0)) {
+				parts[i] = `"` + formatFloat(f) + `"` // SLS 在数组里把它们写成字符串
 			} else {
 				parts[i] = formatValue(e, elem)
 			}

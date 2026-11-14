@@ -22,11 +22,13 @@ func (s *Server) getContextLogs(w http.ResponseWriter, r *http.Request, project 
 	q := r.URL.Query()
 	back, err1 := strconv.Atoi(q.Get("back_lines"))
 	forward, err2 := strconv.Atoi(q.Get("forward_lines"))
-	if err1 != nil || err2 != nil || back < 0 || forward < 0 || back > maxContextLines ||
-		forward > maxContextLines || back+forward == 0 {
-		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", "back_lines and forward_lines must be in [0, 100] and not both 0")
+	if err1 != nil || err2 != nil || back < 0 || forward < 0 || back+forward == 0 {
+		// SLS 的原文（含重复的 "back_lines"）
+		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", "back/forward_linesback_lines or forward_lines must be positive")
 		return
 	}
+	// 超过上限时 SLS 不报错，按上限返回
+	back, forward = min(back, maxContextLines), min(forward, maxContextLines)
 	seq, ok := store.ParsePackMeta(q.Get("pack_meta"))
 	if !ok || q.Get("pack_id") == "" {
 		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", "invalid pack_id or pack_meta")
@@ -50,9 +52,7 @@ func (s *Server) getContextLogs(w http.ResponseWriter, r *http.Request, project 
 		}
 		b.Write(row)
 	}
-	b.WriteString("]}")
+	b.WriteString(`],"total_lines":` + strconv.Itoa(len(res.Rows)) + "}")
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("x-log-progress", "Complete")
-	w.Header().Set("x-log-count", strconv.Itoa(len(res.Rows)))
 	_, _ = w.Write(b.Bytes())
 }

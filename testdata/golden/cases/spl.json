@@ -16,5 +16,13 @@
 {"name": "stats", "op": "logs", "query": "* | stats count() by level", "line": 5},
 {"name": "sort-limit", "op": "logs", "query": "* | sort latency_ms desc | limit 3", "line": 5},
 {"name": "limit", "op": "logs", "query": "* | limit 2", "line": 5},
-{"name": "with-pack-meta", "op": "logs", "query": "service: auth | with_pack_meta", "line": 5}
+{"name": "with-pack-meta", "op": "logs", "query": "service: auth | with_pack_meta", "line": 5},
+{"name": "parse-regexp", "op": "logs", "query": "service: checkout and level: ERROR | parse-regexp msg, '(\\w+) failed: (.*)' as action, reason", "line": 5},
+{"name": "parse-regexp-nomatch", "op": "logs", "query": "service: auth | parse-regexp msg, '(\\d+)' as n", "line": 5},
+{"name": "parse-regexp-where", "op": "logs", "query": "service: checkout | parse-regexp url, '/api/v1/(\\w+)/(\\d+)' as kind, id | where kind = 'orders'", "line": 5},
+{"name": "parse-kv", "op": "logs", "query": "url: search | parse-kv url, '&', '='", "line": 5},
+{"name": "parse-kv-delims", "op": "logs", "query": "url: search | parse-kv url, '?&', '='", "line": 5},
+{"name": "parse-kv-regexp", "op": "logs", "query": "url: search | parse-kv -regexp url, '([a-z]+)=([^&]+)'", "line": 5},
+{"name": "parse-kv-where", "op": "logs", "query": "url: search | parse-kv -regexp url, '([a-z]+)=([^&]+)' | where page = '2'", "line": 5},
+{"name": "parse-kv-nopair", "op": "logs", "query": "service: checkout and url: orders | parse-kv url, '&', '='", "line": 5}
 ]

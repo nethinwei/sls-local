@@ -89,7 +89,13 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl, s
 		}
 	}
 
-	h := api.New(st, log, indexes).Handler()
+	srv := api.New(st, log, indexes)
+	if ttl > 0 { // GetLogStore、GetIndex 展示的保留天数
+		srv.TTLDays = int((ttl + 24*time.Hour - 1) / (24 * time.Hour))
+	} else {
+		srv.TTLDays = 3650
+	}
+	h := srv.Handler()
 	servers := []*http.Server{{Addr: httpAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}}
 	if httpsAddr != "" {
 		cfg, err := tlsutil.SelfSigned()

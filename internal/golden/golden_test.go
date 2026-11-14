@@ -156,6 +156,7 @@ func newLocalTarget(t *testing.T, ix *sls.Index, logstore string) *Target {
 	}
 	t.Cleanup(func() { st.Close() })
 	h := api.New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), map[string]*sls.Index{localProject + "/" + logstore: ix})
+	h.TTLDays = 30 // 与录制用的云端 logstore 一致（只影响 GetLogStore、GetIndex 里的 ttl）
 	srv := httptest.NewServer(h.Handler())
 	t.Cleanup(srv.Close)
 	addr := srv.Listener.Addr().String()

@@ -1,11 +1,8 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
-
-	sls "github.com/aliyun/aliyun-log-go-sdk"
 
 	"github.com/nethinwei/sls-local/internal/query"
 )
@@ -39,10 +36,8 @@ func (s *Server) getHistograms(w http.ResponseWriter, r *http.Request, project s
 		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", "from and to must be unix seconds with from <= to")
 		return
 	}
+	// 带 SQL 时 SLS 忽略 SQL 部分，只按检索条件统计
 	plan, err := query.ParseFor(q.Get("query"), s.index(project, logstore), logstore)
-	if err == nil && plan.SQL != nil {
-		err = fmt.Errorf("GetHistograms with SQL: %w", query.ErrUnsupported)
-	}
 	if err != nil {
 		s.failQuery(w, r, err)
 		return
@@ -61,16 +56,24 @@ func (s *Server) getHistograms(w http.ResponseWriter, r *http.Request, project s
 		s.failQuery(w, r, err)
 		return
 	}
-	buckets := []sls.SingleHistogram{}
+	buckets := []histogramBucket{}
 	var total int64
 	for start := from; start < to; {
 		end := min((start/interval+1)*interval, to) // 边界对齐到 interval 的整数倍
 		n := counts[start-start%interval]
 		total += n
-		buckets = append(buckets, sls.SingleHistogram{Progress: "Complete", Count: n, From: start, To: end})
+		buckets = append(buckets, histogramBucket{From: start, Count: n, To: end, Progress: "Complete"})
 		start = end
 	}
 	w.Header().Set("x-log-progress", "Complete")
 	w.Header().Set("x-log-count", strconv.FormatInt(total, 10))
 	writeJSON(w, http.StatusOK, buckets)
+}
+
+// histogramBucket 是一个桶，字段顺序与 SLS 一致。
+type histogramBucket struct {
+	From     int64  `json:"from"`
+	Count    int64  `json:"count"`
+	To       int64  `json:"to"`
+	Progress string `json:"progress"`
 }

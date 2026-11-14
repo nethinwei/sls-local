@@ -34,10 +34,13 @@ CREATE TABLE IF NOT EXISTS logs (
 	source   VARCHAR NOT NULL,
 	tags     VARCHAR NOT NULL,  -- JSON 对象，键带 __tag__: 前缀，按写入顺序
 	contents VARCHAR NOT NULL,  -- JSON 对象，字段按写入顺序
-	fulltext VARCHAR NOT NULL   -- 全部字段值以换行连接，供全文检索
+	fulltext VARCHAR NOT NULL   -- 全文检索的文本：__source__、字段名与字段值，以换行连接（见 fulltext()）
 );
 -- 上下文：同一来源（pack_id 去掉最后一段序号）的日志按写入顺序相邻
-ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_ctx VARCHAR;`
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_ctx VARCHAR;
+-- __pack_meta__ 的后两段：日志所在包（LogGroup）的条数与它在包里的序号
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_n INTEGER;
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_i INTEGER;`
 
 // KV 是一个字段或 tag。
 type KV struct{ Key, Value string }
@@ -54,6 +57,8 @@ type Group struct {
 	Topic, Source string
 	Tags          []KV // 原始 tag 键（如 __hostname__），写入时加上 __tag__: 前缀
 	Logs          []Log
+	// NumericKeys 是按 long/double 建了索引的字段（小写）：它们的值不进全文索引（与 SLS 一致）
+	NumericKeys map[string]bool
 }
 
 // Store 是 DuckDB 上的日志存储。写入经同一个 Appender 串行进行，查询走连接池。
@@ -215,14 +220,15 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, l := range g.Logs {
+	for i, l := range g.Logs {
 		s.seq++
 		var ns any
 		if l.TimeNs != nil {
 			ns = int32(*l.TimeNs)
 		}
 		if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), ns, g.Topic, g.Source,
-			tagsJSON, objectJSON(dedupe(l.Contents)), fulltext(l.Contents), packCtx); err != nil {
+			tagsJSON, objectJSON(dedupe(l.Contents)), fulltext(g.Source, l.Contents, g.NumericKeys), packCtx,
+			int32(len(g.Logs)), int32(i)); err != nil {
 			return fmt.Errorf("append: %w", err)
 		}
 	}
@@ -266,12 +272,18 @@ func writeString(b *bytes.Buffer, s string) {
 	b.Write(enc)
 }
 
-func fulltext(kvs []KV) string {
-	vals := make([]string, len(kvs))
-	for i, kv := range kvs {
-		vals[i] = kv.Value
+// fulltext 是全文检索的文本。实测 SLS 的全文检索也能匹配字段名（搜 currency 命中带这个字段的日志）
+// 与 __source__，但匹配不到 long/double 字段的值，也匹配不到 tag。
+func fulltext(source string, kvs []KV, numeric map[string]bool) string {
+	parts := make([]string, 0, 2*len(kvs)+1)
+	parts = append(parts, source)
+	for _, kv := range kvs {
+		parts = append(parts, kv.Key)
+		if !numeric[strings.ToLower(kv.Key)] {
+			parts = append(parts, kv.Value)
+		}
 	}
-	return strings.Join(vals, "\n")
+	return strings.Join(parts, "\n")
 }
 
 // DeleteBefore 删除 __time__ 早于 cutoff 的日志，返回删除条数。

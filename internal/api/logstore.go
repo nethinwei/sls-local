@@ -3,10 +3,9 @@ package api
 import (
 	"net/http"
 	"strconv"
-)
 
-// defaultTTL 是 GetLogStore 返回的保留天数，只用于展示；实际保留期由 -ttl 决定。
-const defaultTTL = 3
+	"github.com/nethinwei/sls-local/internal/store"
+)
 
 func (s *Server) getProject(w http.ResponseWriter, r *http.Request, project string) {
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -60,15 +59,69 @@ func (s *Server) getLogstore(w http.ResponseWriter, r *http.Request, project str
 		s.fail(w, r, http.StatusNotFound, "LogStoreNotExist", "logstore "+name+" does not exist")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"logstoreName":   info.Name,
-		"ttl":            defaultTTL,
-		"shardCount":     1,
-		"autoSplit":      false,
-		"appendMeta":     true,
-		"telemetryType":  "None",
-		"mode":           "standard",
-		"createTime":     info.Created,
-		"lastModifyTime": info.Created,
-	})
+	m := &meta{} // 字段与顺序与 SLS 一致
+	m.add("logstoreName", info.Name)
+	m.add("ttl", s.TTLDays)
+	m.add("shardCount", 1)
+	m.add("enable_tracking", false)
+	m.add("autoSplit", false)
+	m.add("maxSplitShard", 0)
+	m.add("createTime", info.Created)
+	m.add("lastModifyTime", info.Created)
+	m.add("archiveSeconds", 0)
+	m.add("appendMeta", false)
+	m.add("telemetryType", "")
+	m.add("mode", "standard")
+	m.add("resourceGroupId", "rg-sls-local")
+	m.add("enableModify", false)
+	m.add("resourceQuota", map[string]any{"storage": map[string]any{"preserved": -1, "used": 0}})
+	writeObject(w, m)
+}
+
+// listShards 实现 ListShards：sls-local 只有一个 shard，覆盖整个哈希范围。
+func (s *Server) listShards(w http.ResponseWriter, r *http.Request, project string) {
+	logstore := r.PathValue("logstore")
+	if !s.requireLogstore(w, r, project, logstore) {
+		return
+	}
+	info, _, _ := s.store.Logstore(r.Context(), project, logstore)
+	m := &meta{}
+	m.add("shardID", 0)
+	m.add("status", "readwrite")
+	m.add("inclusiveBeginKey", "00000000000000000000000000000000")
+	m.add("exclusiveEndKey", "ffffffffffffffffffffffffffffffff")
+	m.add("createTime", info.Created)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(append(append([]byte("["), m.json()...), ']'))
+}
+
+// getShard 处理 GET /logstores/{logstore}/shards/{shard}：目前只有 type=cursor（GetCursor）。
+// 游标与 __pack_meta__ 里的一样，是写入序号的 base64；begin 是最早的一条，end 是最新一条之后。
+func (s *Server) getShard(w http.ResponseWriter, r *http.Request, project string) {
+	logstore := r.PathValue("logstore")
+	if !s.requireLogstore(w, r, project, logstore) {
+		return
+	}
+	if r.PathValue("shard") != "0" {
+		s.fail(w, r, http.StatusNotFound, "ShardNotExist", "shard "+r.PathValue("shard")+" does not exist")
+		return
+	}
+	q := r.URL.Query()
+	if q.Get("type") != "cursor" {
+		s.fail(w, r, http.StatusBadRequest, "NotSupported", "type="+q.Get("type")+" is not supported by sls-local yet")
+		return
+	}
+	seq, err := s.store.Cursor(r.Context(), project, logstore, q.Get("from"))
+	if err != nil {
+		s.fail(w, r, http.StatusBadRequest, "ParameterInvalid", err.Error())
+		return
+	}
+	m := &meta{}
+	m.add("cursor", store.EncodeCursor(seq))
+	writeObject(w, m)
+}
+
+func writeObject(w http.ResponseWriter, m *meta) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(m.json())
 }

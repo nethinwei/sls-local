@@ -27,11 +27,13 @@ type Server struct {
 	reqID   atomic.Int64
 	now     func() time.Time
 	indexes map[string]*index.Index // project/logstore → 配置的索引；没有配置的用自动索引
+	// TTLDays 是 GetLogStore、GetIndex 返回的保留天数（与 -ttl 一致；只用于展示）
+	TTLDays int
 }
 
 // New 创建处理器。indexes 是配置文件里声明了索引的 logstore（键为 project/logstore）。
 func New(st *store.Store, log *slog.Logger, indexes map[string]*sls.Index) *Server {
-	s := &Server{store: st, log: log, now: time.Now, indexes: map[string]*index.Index{}}
+	s := &Server{store: st, log: log, now: time.Now, indexes: map[string]*index.Index{}, TTLDays: 3}
 	for k, raw := range indexes {
 		s.indexes[k] = index.FromConfig(raw)
 	}
@@ -57,6 +59,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /logstores/{logstore}/shards/{shard}", s.withProject(s.putLogs))
 	mux.HandleFunc("POST /logstores/{logstore}/logs", s.withProject(s.getLogs))
 	mux.HandleFunc("GET /logstores/{logstore}/index", s.withProject(s.getIndex))
+	mux.HandleFunc("GET /logstores/{logstore}/shards", s.withProject(s.listShards))
+	mux.HandleFunc("GET /logstores/{logstore}/shards/{shard}", s.withProject(s.getShard))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "NotSupported", fmt.Sprintf("%s %s is not supported by sls-local", r.Method, r.URL.Path))
 	})

@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -11,8 +12,15 @@ import (
 
 // Cond 是一段 DuckDB WHERE 条件及其参数。
 type Cond struct {
-	SQL  string
-	Args []any
+	SQL   string
+	Args  []any
+	Terms []Term // meta.terms：检索语句里的词（SLS 用来高亮）
+}
+
+// Term 是 meta.terms 的一项。
+type Term struct {
+	Term string `json:"term"`
+	Key  string `json:"key"`
 }
 
 // Error 是语句本身的错误，按 SLS 的错误码与原文返回（见 docs/wire-findings.md）。
@@ -46,9 +54,15 @@ func valueExpr(name string, path []string) (string, []any) {
 		}
 		expr, args = "json_extract_string("+col+", ?)", []any{jsonPath(name)}
 	}
-	for _, p := range path {
-		expr = "json_extract_string(" + expr + ", ?)"
-		args = append(args, jsonPath(p))
+	if len(path) > 0 {
+		// 嵌套路径 $."a"."b"；字段值不是合法 JSON 时为 NULL（DuckDB 会报错）
+		jp := "$"
+		for _, p := range path {
+			jp += "." + strings.TrimPrefix(jsonPath(p), "$.")
+		}
+		inner, innerArgs := expr, args
+		expr = "(CASE WHEN json_valid(" + inner + ") THEN json_extract_string(" + inner + ", ?) END)"
+		args = append(append(append([]any{}, innerArgs...), innerArgs...), jp)
 	}
 	return expr, args
 }
@@ -65,7 +79,12 @@ func Search(q string, ix *index.Index) (Cond, error) {
 		return Cond{}, err
 	}
 	if len(toks) == 0 {
-		return Cond{SQL: "TRUE"}, nil
+		// 空语句：SLS 为每个中文分词字段列出一个空词，再加上 *
+		var terms []Term
+		for _, k := range ix.ChnKeys() {
+			terms = append(terms, Term{"", k})
+		}
+		return Cond{SQL: "TRUE", Terms: append(terms, Term{"*", ""})}, nil
 	}
 	p := &parser{toks: toks}
 	n, _, err := p.or()
@@ -80,7 +99,94 @@ func Search(q string, ix *index.Index) (Cond, error) {
 	if err != nil {
 		return Cond{}, err
 	}
-	return Cond{SQL: sql, Args: c.args}, nil
+	return Cond{SQL: sql, Args: c.args, Terms: dedupTerms(terms(n, ix))}, nil
+}
+
+// terms 按 SLS 的规则列出检索词：与（and）保持顺序，或（or）与二元 not 反序，一元 not 末尾补 *。
+// 数值字段记作 *；text 字段按分词符切词，不区分大小写时转小写，短语里的词按字母序。
+func terms(n node, ix *index.Index) []Term {
+	switch n := n.(type) {
+	case binary:
+		l, r := terms(n.l, ix), terms(n.r, ix)
+		if n.op == "AND" {
+			return append(l, r...)
+		}
+		return append(r, l...)
+	case not:
+		return append(terms(n.x, ix), Term{"*", ""})
+	case notBinary:
+		return append(terms(n.r, ix), terms(n.l, ix)...)
+	case matchAll:
+		return []Term{{"*", ""}}
+	case term:
+		if n.key == "" {
+			return wordTerms(n.value, ix.Line, "", n.quoted)
+		}
+		lower := strings.ToLower(n.key)
+		if strings.HasPrefix(lower, "__tag__:") || lower == "__topic__" || lower == "__source__" {
+			return []Term{{n.value, n.key}}
+		}
+		f, path, ok := ix.Lookup(n.key)
+		key := n.key
+		if ok && len(path) == 0 && !ix.Auto {
+			key = f.Name // 键名按索引里的写法（LEVEL: ERROR → level）
+		}
+		if ok && (f.Type == "long" || f.Type == "double") {
+			return []Term{{"*", key}}
+		}
+		return wordTerms(n.value, f, key, n.quoted)
+	case cmp:
+		return compareTerms(n.key, n.value, ix)
+	case rng:
+		return compareTerms(n.key, n.lo, ix)
+	}
+	return nil
+}
+
+func compareTerms(key, value string, ix *index.Index) []Term {
+	if f, _, ok := ix.Lookup(key); ok && (f.Type == "long" || f.Type == "double") {
+		return []Term{{"*", key}}
+	}
+	return []Term{{strings.ToLower(key), ""}, {strings.ToLower(value), ""}} // 非数值字段上的比较按全文的两个词
+}
+
+// wordTerms 把值按字段的分词符切成词。
+func wordTerms(value string, f *index.Field, key string, quoted bool) []Term {
+	toks := strings.Join(index.DefaultTokens, "")
+	cs := false
+	if f != nil {
+		toks, cs = f.Tokens, f.CaseSensitive
+	}
+	if !cs {
+		value = strings.ToLower(value)
+	}
+	if !quoted { // 不加引号时 * 与 ? 是通配符，不是分词符
+		toks = strings.NewReplacer("*", "", "?", "").Replace(toks)
+	}
+	words := strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(toks, r) })
+	if len(words) > 1 {
+		sort.Strings(words)
+	}
+	out := make([]Term, 0, len(words))
+	for _, w := range words {
+		out = append(out, Term{w, key})
+	}
+	if len(out) == 0 {
+		out = append(out, Term{value, key})
+	}
+	return out
+}
+
+func dedupTerms(ts []Term) []Term {
+	seen := map[Term]bool{}
+	out := ts[:0]
+	for _, t := range ts {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // ---------------- 词法 ----------------
@@ -154,8 +260,9 @@ type node interface {
 }
 
 type parser struct {
-	toks []token
-	pos  int
+	toks  []token
+	pos   int
+	depth int // 括号嵌套层数
 }
 
 func (p *parser) done() bool  { return p.pos >= len(p.toks) }
@@ -200,8 +307,24 @@ func (p *parser) unexpected(t token, expecting string) error {
 		t.start+1, t.start+len(near)+1, near)}
 }
 
+// unexpectedEnd 是语句在不该结束的地方结束了：位置是最后一个记号。括号没有闭合、而最后一个记号
+// 是一个完整的检索词时，SLS 列出可以接着写的记号。
 func (p *parser) unexpectedEnd() error {
-	return &Error{msgSyntaxPrefix + "unexpected $end"}
+	msg := msgSyntaxPrefix + "unexpected $end"
+	if len(p.toks) == 0 {
+		return &Error{msg}
+	}
+	last := p.toks[len(p.toks)-1]
+	if p.depth > 0 && !isKeyword(last) && last.kind != tLParen {
+		msg += ", expecting AND or OR or NOT or RIGHTBRACKET"
+	}
+	return &Error{msg + fmt.Sprintf(" error position is from column:%d to column:%d,error near < %s >",
+		last.start+1, last.end+1, last.text)}
+}
+
+// colonInValue 是值里出现了不带引号的冒号（SLS 报语法错误，位置是这个冒号）。
+func colonInValue(pos int) error {
+	return &Error{msgSyntaxPrefix + fmt.Sprintf("unexpected COLON, expecting $end error position is from column:%d to column:%d,error near < : >", pos+1, pos+2)}
 }
 
 func (p *parser) or() (node, bool, error) {
@@ -240,7 +363,7 @@ func (p *parser) and() (node, bool, error) {
 			if err != nil {
 				return nil, false, err
 			}
-			l, bare = binary{"AND", l, not{r}}, false
+			l, bare = notBinary{l, r}, false
 		case bare && p.bareTermAhead():
 			r, _, err := p.unary()
 			if err != nil {
@@ -306,6 +429,8 @@ func (p *parser) primary() (node, bool, error) {
 	t := p.next()
 	switch t.kind {
 	case tLParen:
+		p.depth++
+		defer func() { p.depth-- }()
 		n, _, err := p.or()
 		if err != nil {
 			return nil, false, err
@@ -327,6 +452,11 @@ func (p *parser) primary() (node, bool, error) {
 		return nil, false, p.unexpected(t, "")
 	}
 	key, value, hasKey := splitKey(t.text)
+	if !hasKey && !p.done() && p.peek().kind == tWord && p.peek().text == ":" {
+		// key : value（冒号前后都有空白）
+		p.next()
+		key, value, hasKey = t.text, "", true
+	}
 	if !hasKey {
 		if value == "*" {
 			return matchAll{}, false, nil
@@ -337,6 +467,9 @@ func (p *parser) primary() (node, bool, error) {
 		return nil, false, p.unexpected(t, "")
 	}
 	if value != "" {
+		if i := strings.IndexByte(value, ':'); i >= 0 {
+			return nil, false, colonInValue(t.end - len(value) + i)
+		}
 		return term{key: key, value: value}, false, nil
 	}
 	// key: 后面隔着空白跟值：可以是词或引号字符串
@@ -348,6 +481,9 @@ func (p *parser) primary() (node, bool, error) {
 	case v.kind == tQuoted:
 		return term{key: key, value: v.text, quoted: true}, false, nil
 	case v.kind == tWord && !isKeyword(v):
+		if i := strings.IndexByte(v.text, ':'); i >= 0 {
+			return nil, false, colonInValue(v.start + i)
+		}
 		return term{key: key, value: v.text}, false, nil
 	}
 	return nil, false, p.unexpected(v, "")
@@ -406,7 +542,7 @@ type compiler struct {
 	args []any
 }
 
-// field 找到字段；没有索引的普通字段报 SLS 同款错误，没有索引的 tag 不报错、匹配不到（ok=false）。
+// field 找到字段；没有索引的普通字段报 SLS 同款错误，没有索引的 tag 不报错（ok=false，按整值匹配）。
 func (c *compiler) field(key string) (*index.Field, []string, bool, error) {
 	f, path, ok := c.ix.Lookup(key)
 	if ok {
@@ -445,6 +581,13 @@ func (n not) compile(c *compiler) (string, error) {
 	return "(NOT " + x + ")", nil
 }
 
+// notBinary 是二元 not：a not b = a and not b（单独一种节点，meta.terms 的顺序与 and 不同）。
+type notBinary struct{ l, r node }
+
+func (n notBinary) compile(c *compiler) (string, error) {
+	return binary{"AND", n.l, not{n.r}}.compile(c)
+}
+
 type matchAll struct{}
 
 func (matchAll) compile(*compiler) (string, error) { return "TRUE", nil }
@@ -468,17 +611,26 @@ func (t term) compile(c *compiler) (string, error) {
 		return c.textMatch("fulltext", nil, c.ix.Line, t.value, wildcard), nil
 	}
 	f, path, ok, err := c.field(t.key)
-	if err != nil || !ok {
+	if err != nil {
 		return "FALSE", err
+	}
+	if !ok { // 没有索引的 tag：按整个值匹配，区分大小写，支持词尾通配（实测如此）
+		return c.tagMatch(t.key, t.value, wildcard), nil
 	}
 	expr, args := valueExpr(f.Name, path)
 	if wildcard && t.value == "*" {
 		c.args = append(c.args, args...)
+		switch strings.ToLower(t.key) {
+		case "__topic__": // 实测 __topic__: * 什么也匹配不到（有 topic 的日志也不行）
+			return "FALSE", nil
+		case "__source__":
+			return "(" + expr + " <> '')", nil
+		}
 		return "(" + expr + " IS NOT NULL)", nil
 	}
 	if f.Type == "long" || f.Type == "double" {
 		// 数值字段：key: 值 是数值相等，非数值与通配都匹配不到
-		n, ok := parseNumber(t.value, f.Type)
+		n, ok := parseExactNumber(t.value, f.Type) // key: 值 要求整个值是数（6* 匹配不到）
 		if !ok {
 			return "FALSE", nil
 		}
@@ -487,6 +639,21 @@ func (t term) compile(c *compiler) (string, error) {
 		return "coalesce(" + numeric(expr, f.Type) + " = ?, false)", nil
 	}
 	return c.textMatch(expr, args, f, t.value, wildcard), nil
+}
+
+// tagMatch 是没有索引的 tag 上的检索：整个值相等；不加引号时 * 匹配任意多个字符、? 匹配一个。
+func (c *compiler) tagMatch(key, value string, wildcard bool) string {
+	expr, args := valueExpr(key, nil)
+	c.args = append(c.args, args...)
+	if wildcard && value == "*" {
+		return "(" + expr + " IS NOT NULL)"
+	}
+	pattern := regexp.QuoteMeta(value)
+	if wildcard {
+		pattern = strings.NewReplacer(`\*`, ".*", `\?`, ".").Replace(pattern)
+	}
+	c.args = append(c.args, "^"+pattern+"$")
+	return "coalesce(regexp_matches(" + expr + ", ?), false)"
 }
 
 // textMatch 按字段的分词符把值切成词，要求它们在字段文本中连续出现（短语），两端是分词符或文本边界。
@@ -563,9 +730,32 @@ func numeric(expr, typ string) string {
 	return "TRY_CAST(" + expr + " AS DOUBLE)"
 }
 
-func parseNumber(s, typ string) (any, bool) {
+// parseExactNumber 要求整个值是一个数（key: 值 的相等匹配）。
+func parseExactNumber(s, typ string) (any, bool) {
 	if typ == "long" {
 		n, err := strconv.ParseInt(s, 10, 64)
+		return n, err == nil
+	}
+	n, err := strconv.ParseFloat(s, 64)
+	return n, err == nil
+}
+
+// parseNumber 解析比较与区间里的数值。long 字段与 SLS 一样只取开头的整数部分（像 C 的 atoll：
+// 300.5 → 300、3e2 → 3，实测如此）；double 字段按浮点数解析。
+func parseNumber(s, typ string) (any, bool) {
+	if typ == "long" {
+		end := 0
+		if end < len(s) && (s[end] == '-' || s[end] == '+') {
+			end++
+		}
+		digits := end
+		for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+			end++
+		}
+		if end == digits {
+			return nil, false
+		}
+		n, err := strconv.ParseInt(s[:end], 10, 64)
 		return n, err == nil
 	}
 	n, err := strconv.ParseFloat(s, 64)
@@ -575,10 +765,12 @@ func parseNumber(s, typ string) (any, bool) {
 // tokenPattern 把检索值编译成 RE2：值内各词以分词符相连，两端是分词符或文本边界。
 // tokens 是字段的分词符；wildcard 时 * 与 ? 是词内通配符而不是分词符。值中没有任何词时 ok=false。
 func tokenPattern(value, tokens string, wildcard bool) (string, bool) {
+	// 查询值里的 * 与 ? 是通配符，不切词；数据仍按全部分词符切（url 里的 ? 是分隔符）
+	splitBy := tokens
 	if wildcard {
-		tokens = strings.NewReplacer("*", "", "?", "").Replace(tokens)
+		splitBy = strings.NewReplacer("*", "", "?", "").Replace(tokens)
 	}
-	words := strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(tokens, r) })
+	words := strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(splitBy, r) })
 	if len(words) == 0 {
 		return "", false
 	}

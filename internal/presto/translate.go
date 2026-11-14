@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -22,6 +24,13 @@ type Stmt struct {
 	// Types 是推断出的输出列类型（SLS 的写法）；只填有把握而 DuckDB 给不出的（varchar(n)、unknown、json、real），
 	// 其余为空，由执行结果的类型决定。
 	Types []string
+	// DefaultLimit 表示最外层没写 LIMIT、用了默认的 100 行（SLS 这时在 meta 里返回 limited）
+	DefaultLimit bool
+	// Shifts 是 compare 用到的时间偏移（秒）：store 为每个偏移建一个 log__shift_<n>，时间范围往前平移 n 秒
+	Shifts []int64
+	// Processed 是 meta.processedRows 的计算式（接在 WITH log AS (...) SELECT 之后）：最外层各个 select
+	// 读到的日志条数之和——直接读 log 时是满足 WHERE 的条数，没有表时是 0（与 SLS 一致）
+	Processed string
 }
 
 // NotFoundError 是 FROM 引用了 log 以外的表：SLS 把它当成另一个 logstore。
@@ -88,7 +97,14 @@ func Translate(src string, ix *index.Index, logstore string) (*Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Stmt{SQL: sql, Args: t.args, InsertAt: t.insertAt, Types: t.topTypes}, nil
+	for _, n := range t.shifts { // compare 平移的时段也算扫描量（实测是各时段条数之和）
+		t.processed = append(t.processed, "(SELECT count(*) FROM "+ShiftTable(n)+")")
+	}
+	processed := strings.Join(t.processed, " + ")
+	if processed == "" {
+		processed = "(SELECT count(*) FROM log)"
+	}
+	return &Stmt{SQL: sql, Args: t.args, InsertAt: t.insertAt, Types: t.topTypes, DefaultLimit: t.defaultLimit, Processed: processed, Shifts: t.shifts}, nil
 }
 
 // scanFrom 在记号流里找 FROM/JOIN：原文有没有 from（决定 SLS 是否补 from 子句），以及 from log 的位置。
@@ -113,16 +129,23 @@ func (t *tr) scanFrom() {
 
 // tr 是一次翻译的状态。
 type tr struct {
-	ix       *index.Index
-	tokens   *antlr.CommonTokenStream
-	srcLen   int
-	args     []any
-	ctes     []map[string][]string // WITH 定义的表（小写名 → 列名），内层在后
-	insertAt int
-	topSpec  bool // 已经处理过最外层的第一个 select
-	topTypes []string
-	nAlias   int
-	hasFrom  bool // 原文里出现过 FROM：SLS 这时不会补 from <logstore>
+	ix           *index.Index
+	tokens       *antlr.CommonTokenStream
+	srcLen       int
+	args         []any
+	ctes         []map[string][]string // WITH 定义的表（小写名 → 列名），内层在后
+	insertAt     int
+	topSpec      bool // 已经处理过最外层的第一个 select
+	topTypes     []string
+	defaultLimit bool
+	processed    []string // 见 Stmt.Processed
+	sub          int      // >0 时在子查询或 WITH 的定义里
+	resolve      Resolver // SPL 表达式：字段名由调用方解析（见 TranslateExpr）
+	logName      string   // 当前翻译用的 log 表名（compare 把子查询放到平移过时间的 log__shift_n 上再翻译一遍）
+	shifts       []int64  // compare 用到的时间偏移（秒）
+	cmp          *compareCtx
+	nAlias       int
+	hasFrom      bool // 原文里出现过 FROM：SLS 这时不会补 from <logstore>
 	// SLS 改写后的坐标：logRefs 是 from log 里 log 的位置（换成带引号的 logstore 名），insertAt 处插入 from 子句
 	quotedLogstore string
 	logRefs        []int
@@ -155,7 +178,9 @@ func (t *tr) query(q parser.IQueryContext, outer *scope, top bool) (string, []st
 		defer func() { t.ctes = t.ctes[:len(t.ctes)-1] }()
 		var defs []string
 		for _, nq := range w.AllNamedQuery() {
+			t.sub++
 			sql, cols, err := t.query(nq.Query(), outer, false)
+			t.sub--
 			if err != nil {
 				return "", nil, err
 			}
@@ -206,6 +231,7 @@ func (t *tr) queryNoWith(q parser.IQueryNoWithContext, outer *scope, top bool) (
 		b.WriteString(" LIMIT " + q.GetFetchFirstNRows().GetText())
 	case top && q.GetLimit() == nil:
 		fmt.Fprintf(&b, " LIMIT %d", defaultLimit)
+		t.defaultLimit = true
 	}
 	return b.String(), cols, nil
 }
@@ -280,8 +306,21 @@ func (t *tr) querySpec(q *parser.QuerySpecificationContext, outer *scope) (strin
 		// 其他没写 FROM 的 select 没有表，只算一次
 	case q.FROM() == nil:
 		sc.rels = []*rel{{log: true}}
-		from = []string{"log"}
+		from = []string{t.log()}
 	default:
+		offsets, err := compareOffsets(q)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if len(offsets) > 0 {
+			f, err := t.compareFrom(q, sc, offsets)
+			if err != nil {
+				return "", nil, nil, err
+			}
+			from = append(from, f)
+			defer func() { t.cmp = nil }()
+			break
+		}
 		for _, r := range q.AllRelation() {
 			s, err := t.relation(r, sc)
 			if err != nil {
@@ -331,12 +370,27 @@ func (t *tr) querySpec(q *parser.QuerySpecificationContext, outer *scope) (strin
 	if len(from) > 0 {
 		b.WriteString(" FROM " + strings.Join(from, ", "))
 	}
+	readsLog := len(sc.rels) == 1 && sc.rels[0].log
+	var pushed string
 	if w := q.GetWhere(); w != nil {
 		v, err := t.boolExpr(w, sc, mode{})
 		if err != nil {
 			return "", nil, nil, err
 		}
 		b.WriteString(" WHERE " + v.sql)
+		if readsLog {
+			pushed = t.pushdown(w, sc)
+		}
+	}
+	if outer == nil && t.sub == 0 { // 最外层（含集合运算的各个分支）
+		switch {
+		case len(sc.rels) == 0:
+			t.processed = append(t.processed, "0")
+		case pushed != "":
+			t.processed = append(t.processed, "(SELECT count(*) FROM log WHERE "+pushed+")")
+		default:
+			t.processed = append(t.processed, "(SELECT count(*) FROM log)")
+		}
 	}
 	if g := q.GroupBy(); g != nil {
 		s, err := t.groupBy(g, sc)
@@ -476,12 +530,14 @@ func (t *tr) sampled(s parser.ISampledRelationContext, sc *scope) (string, error
 					return "", syntaxErrorf(a.ColumnAliases().GetStart(), "column aliases on log are %v", ErrUnsupported)
 				}
 				sc.rels = append(sc.rels, &rel{log: true})
-				return "log", nil
+				return t.log(), nil
 			}
 		}
 		return "", &NotFoundError{Name: p.QualifiedName().GetText()}
 	case *parser.SubqueryRelationContext:
+		t.sub++
 		sql, cols, err := t.query(p.Query(), sc.parent, false)
+		t.sub--
 		if err != nil {
 			return "", err
 		}
@@ -651,4 +707,219 @@ func (t *tr) rewrittenCol(tok antlr.Token) int {
 func (t *tr) semErrorf(tok antlr.Token, format string, a ...any) error {
 	l := tok.GetLine()
 	return &Error{fmt.Sprintf("ErrorType:SyntaxError.ErrorPosition,line:%d,column:%d.ErrorMessage:line %d:%d: ", l, tok.GetColumn()+1, l, t.rewrittenCol(tok)) + fmt.Sprintf(format, a...)}
+}
+
+// pushdown 是 WHERE 里 SLS 会下推到索引检索的部分（meta.processedRows 是下推过滤后的条数）：用 and 连接的
+// 「数值字段 比较 数值常量」「数值字段 between 常量」「文本字段 =/in 字符串常量」（按索引不区分大小写）。
+// 其余条件不下推；没有可下推的条件时返回空。
+func (t *tr) pushdown(e parser.IBooleanExpressionContext, sc *scope) string {
+	switch e := e.(type) {
+	case *parser.LogicalBinaryContext:
+		if !strings.EqualFold(e.GetOperator().GetText(), "and") {
+			return ""
+		}
+		var parts []string
+		for _, x := range []parser.IBooleanExpressionContext{e.GetLeft(), e.GetRight()} {
+			if p := t.pushdown(x, sc); p != "" {
+				parts = append(parts, p)
+			}
+		}
+		return strings.Join(parts, " AND ")
+	case *parser.PredicatedContext:
+		if e.Predicate() == nil {
+			return ""
+		}
+		field, ok := t.fieldRef(e.ValueExpression(), sc)
+		if !ok {
+			return ""
+		}
+		switch p := e.Predicate().(type) {
+		case *parser.ComparisonContext:
+			lit, kind := literal(p.GetRight())
+			op := p.ComparisonOperator().GetText()
+			switch {
+			case field.numeric() && kind == "number":
+				return "(" + field.sql + " " + op + " " + lit + ")"
+			case strings.HasPrefix(field.typ, "varchar") && kind == "string" && op == "=":
+				return "(lower(" + field.sql + ") = lower(" + lit + "))"
+			}
+		case *parser.BetweenContext:
+			lo, k1 := literal(p.GetLower())
+			hi, k2 := literal(p.GetUpper())
+			if field.numeric() && p.NOT() == nil && k1 == "number" && k2 == "number" {
+				return "(" + field.sql + " BETWEEN " + lo + " AND " + hi + ")"
+			}
+		case *parser.InListContext:
+			if !strings.HasPrefix(field.typ, "varchar") || p.NOT() != nil {
+				return ""
+			}
+			var items []string
+			for _, x := range p.AllExpression() {
+				pe, ok := x.BooleanExpression().(*parser.PredicatedContext)
+				if !ok || pe.Predicate() != nil {
+					return ""
+				}
+				lit, kind := literal(pe.ValueExpression())
+				if kind != "string" {
+					return ""
+				}
+				items = append(items, "lower("+lit+")")
+			}
+			return "(lower(" + field.sql + ") IN (" + strings.Join(items, ", ") + "))"
+		}
+	}
+	return ""
+}
+
+// fieldRef 判断表达式是不是对 log 字段的直接引用。
+func (t *tr) fieldRef(e parser.IValueExpressionContext, sc *scope) (val, bool) {
+	d, ok := e.(*parser.ValueExpressionDefaultContext)
+	if !ok {
+		return val{}, false
+	}
+	switch p := d.PrimaryExpression().(type) {
+	case *parser.ColumnReferenceContext, *parser.DereferenceContext:
+		v, err := t.primary(p, sc, mode{})
+		return v, err == nil && (v.numeric() || strings.HasPrefix(v.typ, "varchar"))
+	}
+	return val{}, false
+}
+
+// literal 返回常量的 SQL 与种类（number、string）；不是常量时种类为空。
+func literal(e parser.IValueExpressionContext) (string, string) {
+	if u, ok := e.(*parser.ArithmeticUnaryContext); ok && u.GetOperator().GetText() == "-" {
+		s, kind := literal(u.ValueExpression())
+		if kind == "number" {
+			return "-" + s, kind
+		}
+		return "", ""
+	}
+	d, ok := e.(*parser.ValueExpressionDefaultContext)
+	if !ok {
+		return "", ""
+	}
+	switch p := d.PrimaryExpression().(type) {
+	case *parser.NumericLiteralContext:
+		return p.GetText(), "number"
+	case *parser.StringLiteralContext:
+		if lit, ok := p.String_().(*parser.BasicStringLiteralContext); ok {
+			return lit.GetText(), "string"
+		}
+	}
+	return "", ""
+}
+
+func (t *tr) log() string {
+	if t.logName != "" {
+		return t.logName
+	}
+	return "log"
+}
+
+// ShiftTable 是 compare 用的、时间范围往前平移 n 秒的 log。
+func ShiftTable(n int64) string { return fmt.Sprintf("log__shift_%d", n) }
+
+// compareCtx 是一层 select 里 compare 的上下文：当前时段的子查询别名，与各偏移对应的子查询别名。
+type compareCtx struct {
+	cur  string
+	prev map[int64]string
+}
+
+// compareOffsets 找出这一层 select 里 compare(x, n1, n2…) 用到的偏移。
+func compareOffsets(q *parser.QuerySpecificationContext) ([]int64, error) {
+	var out []int64
+	seen := map[int64]bool{}
+	var err error
+	var walk func(n antlr.Tree)
+	walk = func(n antlr.Tree) {
+		if c, ok := n.(*parser.FunctionCallContext); ok && strings.EqualFold(c.QualifiedName().GetText(), "compare") {
+			for _, a := range c.AllExpression()[1:] {
+				v, perr := strconv.ParseInt(strings.TrimSpace(a.GetText()), 10, 64)
+				if perr != nil || v <= 0 {
+					err = syntaxErrorf(a.GetStart(), "compare offsets must be positive integer seconds")
+					return
+				}
+				if !seen[v] {
+					seen[v] = true
+					out = append(out, v)
+				}
+			}
+			return // 嵌套的 compare 由 call 报错
+		}
+		if _, ok := n.(*parser.SubqueryExpressionContext); ok {
+			return
+		}
+		for i := 0; i < n.GetChildCount(); i++ {
+			walk(n.GetChild(i))
+		}
+	}
+	for _, it := range q.AllSelectItem() {
+		walk(it)
+	}
+	return out, err
+}
+
+// compareFrom 生成 compare 的 FROM：FROM 里的子查询在当前时段与每个偏移的时段各算一遍，
+// 按 GROUP BY 的列左连接（没有 GROUP BY 时一行对一行）。
+func (t *tr) compareFrom(q *parser.QuerySpecificationContext, sc *scope, offsets []int64) (string, error) {
+	rels := q.AllRelation()
+	if len(rels) != 1 {
+		return "", syntaxErrorf(q.FROM().GetSymbol(), "compare needs FROM (subquery)")
+	}
+	def, ok := rels[0].(*parser.RelationDefaultContext)
+	if !ok {
+		return "", syntaxErrorf(rels[0].GetStart(), "compare needs FROM (subquery)")
+	}
+	ar := def.SampledRelation().AliasedRelation()
+	sub, ok := ar.RelationPrimary().(*parser.SubqueryRelationContext)
+	if !ok {
+		return "", syntaxErrorf(ar.GetStart(), "compare needs FROM (subquery)")
+	}
+	cur, err := t.relation(rels[0], sc)
+	if err != nil {
+		return "", err
+	}
+	curRel := sc.rels[len(sc.rels)-1]
+	var keys []string
+	if g := q.GroupBy(); g != nil {
+		for _, el := range g.AllGroupingElement() {
+			single, ok := el.(*parser.SingleGroupingSetContext)
+			if !ok || len(single.GroupingSet().AllExpression()) != 1 {
+				return "", syntaxErrorf(el.GetStart(), "compare: group by plain columns of the subquery")
+			}
+			name, ok := exprName(single.GroupingSet().Expression(0))
+			if !ok {
+				return "", syntaxErrorf(el.GetStart(), "compare: group by plain columns of the subquery")
+			}
+			keys = append(keys, name)
+		}
+	}
+	t.cmp = &compareCtx{cur: curRel.alias, prev: map[int64]string{}}
+	b := cur
+	for _, n := range offsets {
+		saved := t.logName
+		t.logName = ShiftTable(n)
+		t.sub++
+		sql, _, err := t.query(sub.Query(), sc.parent, false)
+		t.sub--
+		t.logName = saved
+		if err != nil {
+			return "", err
+		}
+		if !slices.Contains(t.shifts, n) {
+			t.shifts = append(t.shifts, n)
+		}
+		alias := fmt.Sprintf("__sls_cmp%d", n)
+		t.cmp.prev[n] = alias
+		on := "TRUE"
+		if len(keys) > 0 {
+			var conds []string
+			for _, k := range keys {
+				conds = append(conds, quote(curRel.alias)+"."+quote(k)+" IS NOT DISTINCT FROM "+quote(alias)+"."+quote(k))
+			}
+			on = strings.Join(conds, " AND ")
+		}
+		b += " LEFT JOIN (" + sql + ") AS " + quote(alias) + " ON " + on
+	}
+	return b, nil
 }

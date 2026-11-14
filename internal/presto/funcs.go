@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antlr4-go/antlr/v4"
+
 	"github.com/nethinwei/sls-local/internal/presto/parser"
 )
 
@@ -329,7 +331,13 @@ func init() {
 func (t *tr) call(e *parser.FunctionCallContext, sc *scope, m mode) (val, error) {
 	nameCtx := e.QualifiedName()
 	name := strings.ToLower(nameCtx.GetText())
+	if name == "compare" {
+		return t.compare(e, sc, m)
+	}
 	f, ok := funcs[name]
+	if ok && t.resolve != nil && (aggregates[name] || windowFuncs[name] != "") {
+		ok = false // SPL 的表达式只针对一行
+	}
 	if !ok {
 		return val{}, t.semErrorf(nameCtx.GetStart(), "Function %s not registered", name)
 	}
@@ -485,4 +493,60 @@ func windowSeconds(lit string) (int64, error) {
 		return 0, &Error{"invalid time_series window " + lit}
 	}
 	return n * unit, nil
+}
+
+// compare(x, n1, n2…) 是 SLS 的同比环比：返回 [当前值, n1 秒前的值, n2 秒前的值…, 当前/n1 前, 当前/n2 前…]
+// （array(double)）。x 是 FROM 子查询的一列，子查询在平移过时间范围的 log 上各算一遍（见 compareFrom）。
+func (t *tr) compare(e *parser.FunctionCallContext, sc *scope, m mode) (val, error) {
+	args := e.AllExpression()
+	if len(args) < 2 {
+		return val{}, t.semErrorf(e.GetStart(), "compare needs a value and at least one offset")
+	}
+	if inner := firstAggregate(args[0]); inner != nil {
+		return val{}, t.semErrorf(e.GetStart(), "Cannot nest aggregations inside aggregation 'compare': [\"%s\"(%s)]",
+			strings.ToLower(inner.QualifiedName().GetText()), callArgsText(inner))
+	}
+	if t.cmp == nil {
+		return val{}, t.semErrorf(e.GetStart(), "compare needs FROM (subquery)")
+	}
+	v, err := t.expr(args[0], sc, m)
+	if err != nil {
+		return val{}, err
+	}
+	cur := "CAST(arbitrary(" + v.sql + ") AS DOUBLE)"
+	prefix := quote(t.cmp.cur) + "."
+	var vals, ratios []string
+	for _, a := range args[1:] {
+		n, _ := strconv.ParseInt(strings.TrimSpace(a.GetText()), 10, 64)
+		prev := "CAST(arbitrary(" + strings.ReplaceAll(v.sql, prefix, quote(t.cmp.prev[n])+".") + ") AS DOUBLE)"
+		vals = append(vals, prev)
+		// 历史值为 0 时比值是 Infinity（都为 0 时 NaN），与 SLS 一致
+		ratios = append(ratios, "(CASE WHEN "+prev+" = 0 THEN (CASE WHEN "+cur+" = 0 THEN CAST('nan' AS DOUBLE) ELSE CAST('inf' AS DOUBLE) END) ELSE "+cur+" / "+prev+" END)")
+	}
+	return val{"[" + strings.Join(append(append([]string{cur}, vals...), ratios...), ", ") + "]", "array"}, nil
+}
+
+// firstAggregate 找到表达式里第一个聚合函数调用（compare 的参数不能直接是聚合）。
+func firstAggregate(n antlr.Tree) *parser.FunctionCallContext {
+	if c, ok := n.(*parser.FunctionCallContext); ok && aggregates[strings.ToLower(c.QualifiedName().GetText())] {
+		return c
+	}
+	for i := 0; i < n.GetChildCount(); i++ {
+		if c := firstAggregate(n.GetChild(i)); c != nil {
+			return c
+		}
+	}
+	return nil
+}
+
+// callArgsText 是 Presto 报错里函数参数的写法（count(*) → *）。
+func callArgsText(c *parser.FunctionCallContext) string {
+	if c.ASTERISK() != nil {
+		return "*"
+	}
+	var parts []string
+	for _, a := range c.AllExpression() {
+		parts = append(parts, a.GetText())
+	}
+	return strings.Join(parts, ", ")
 }

@@ -3,9 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
-	"strconv"
+	"strings"
 	"time"
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
@@ -33,6 +34,10 @@ func (s *Server) getLogs(w http.ResponseWriter, r *http.Request, project string)
 	if !s.requireLogstore(w, r, project, logstore) {
 		return
 	}
+	if req.From > req.To {
+		s.fail(w, r, http.StatusBadRequest, "InvalidTimeRange", fmt.Sprintf("Time Range %d to %d is invalid", req.From, req.To))
+		return
+	}
 	plan, err := query.ParseFor(req.Query, s.index(project, logstore), logstore)
 	if err != nil {
 		s.failQuery(w, r, err)
@@ -50,27 +55,24 @@ func (s *Server) getLogs(w http.ResponseWriter, r *http.Request, project string)
 		Project: project, Logstore: logstore,
 		From: req.From, FromNs: req.FromNsPart, To: req.To, ToNs: req.ToNsPart,
 		Where: plan.Where, Limit: lines, Offset: max(req.Offset, 0), Reverse: req.Reverse,
-		PackMeta: plan.PackMeta,
+		PackMeta: plan.PackMeta, Stages: plan.Stages,
 	})
 	if err != nil {
 		s.failQuery(w, r, err)
 		return
 	}
 
-	whereQuery := plan.Search
+	m := baseMeta(plan, int64(len(res.Rows)), int64(len(res.Rows)), start, false)
+	if len(res.Keys) > 0 { // 没有结果时 SLS 不返回 keys
+		m.add("keys", capKeys(res.Keys))
+	}
+	m.add("terms", terms(plan))
 	if plan.SPL {
-		whereQuery += " " // 与 SLS 一致：带 SPL 时 whereQuery 是检索部分加一个空格
+		m.add("new_mode", 4)
+		m.add("scanBytes", 0)
 	}
-	meta := sls.GetLogsV3ResponseMeta{
-		Progress:           "Complete",
-		WhereQuery:         whereQuery,
-		Keys:               res.Keys,
-		ProcessedRows:      res.Count,
-		ElapsedMillisecond: time.Since(start).Milliseconds(),
-		Count:              int64(len(res.Rows)),
-		TelemetryType:      "logging",
-	}
-	writeRows(w, meta, res.Rows)
+	m.add("isAccurate", true)
+	writeRows(w, m, res.Rows)
 }
 
 // runSQL 执行 检索 | SQL：lines、offset、reverse 不生效（与 SLS 一致），行数由 LIMIT 决定（默认 100）。
@@ -84,27 +86,110 @@ func (s *Server) runSQL(w http.ResponseWriter, r *http.Request, project, logstor
 		s.failQuery(w, r, err)
 		return
 	}
-	meta := sls.GetLogsV3ResponseMeta{
-		Progress:           "Complete",
-		WhereQuery:         plan.Search + " ",
-		HasSQL:             true,
-		ProcessedRows:      res.Processed,
-		ElapsedMillisecond: time.Since(start).Milliseconds(),
-		Count:              int64(len(res.Rows)),
-		TelemetryType:      "logging",
-		PowerSql:           req.PowerSQL,
-		Keys:               res.Keys,
-		ColumnTypes:        res.Types,
+	m := baseMeta(plan, int64(len(res.Rows)), res.Processed, start, true)
+	m.add("cpuSec", 0)
+	m.add("cpuCores", 0)
+	m.add("powerSql", req.PowerSQL)
+	if st := plan.SQL; st.InsertAt >= 0 && st.Text != "" {
+		before := st.Text[:min(st.InsertAt, len(st.Text))]
+		line := 1 + strings.Count(before, "\n")
+		col := len(before) - (strings.LastIndex(before, "\n") + 1)
+		m.add("insertedSQL", fmt.Sprintf("%d,%d, from %q ", line, col, logstore))
 	}
-	writeRows(w, meta, res.Rows)
+	m.add("keys", res.Keys)
+	m.add("terms", terms(plan))
+	if plan.SQL.DefaultLimit {
+		m.add("limited", 100)
+	}
+	m.add("isAccurate", true)
+	m.add("columnTypes", res.Types)
+	writeRows(w, m, res.Rows)
+}
+
+// meta 是按 SLS 字段顺序输出的 meta 对象。
+type meta struct {
+	keys []string
+	vals []any
+}
+
+func (m *meta) add(k string, v any) { m.keys = append(m.keys, k); m.vals = append(m.vals, v) }
+
+func (m *meta) json() []byte {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, k := range m.keys {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		writeJSONValue(&b, k)
+		b.WriteByte(':')
+		writeJSONValue(&b, m.vals[i])
+	}
+	b.WriteByte('}')
+	return b.Bytes()
+}
+
+func writeJSONValue(b *bytes.Buffer, v any) {
+	if m, ok := v.(*meta); ok {
+		b.Write(m.json())
+		return
+	}
+	enc := json.NewEncoder(b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
+	b.Truncate(b.Len() - 1)
+}
+
+// baseMeta 是各种语句共有的前半部分。whereQuery、aggQuery 的写法与 SLS 一致：
+//   - 只有检索：whereQuery 是原文，aggQuery 为空；
+//   - 带 SQL：whereQuery 是 "|" 之前的原文（含末尾空格），aggQuery 是 "|" 之后的原文；
+//   - 带 SPL：whereQuery 同上，aggQuery 是 "*" 加上 "|" 及之后的原文；
+//   - 只有 | with_pack_meta：whereQuery 是整条语句。
+func baseMeta(plan *query.Plan, count, processed int64, start time.Time, hasSQL bool) *meta {
+	where, agg := plan.Query, ""
+	if plan.Pipes != "" && (hasSQL || plan.SPL) {
+		where = plan.Query[:len(plan.Query)-len(plan.Pipes)]
+		if hasSQL {
+			agg = plan.Pipes[1:]
+		} else {
+			agg = "*" + plan.Pipes
+		}
+	}
+	m := &meta{}
+	m.add("count", count)
+	m.add("progress", "Complete")
+	m.add("processedRows", processed)
+	m.add("processedBytes", 0)
+	m.add("elapsedMillisecond", time.Since(start).Milliseconds())
+	m.add("hasSQL", hasSQL)
+	m.add("telementryType", "logging") // SLS 同时返回拼错的与正确的两个字段
+	m.add("telemetryType", "logging")
+	m.add("whereQuery", where)
+	m.add("aggQuery", agg)
+	return m
+}
+
+// capKeys：SLS 的 meta.keys 最多 20 个。
+func capKeys(keys []string) []string {
+	if len(keys) > 20 {
+		return keys[:20]
+	}
+	return keys
+}
+
+func terms(plan *query.Plan) []query.Term {
+	if plan.Terms == nil {
+		return []query.Term{}
+	}
+	return plan.Terms
 }
 
 // writeRows 写出 GetLogsV3 的响应：{"meta": ..., "data": [行...]}，行是编码好的 JSON 对象。
-func writeRows(w http.ResponseWriter, meta sls.GetLogsV3ResponseMeta, rows [][]byte) {
+// 与 SLS 一致，不带 x-log-count、x-log-progress 头（只有 GetHistograms 带）。
+func writeRows(w http.ResponseWriter, m *meta, rows [][]byte) {
 	var b bytes.Buffer
 	b.WriteString(`{"meta":`)
-	metaJSON, _ := json.Marshal(meta)
-	b.Write(metaJSON)
+	b.Write(m.json())
 	b.WriteString(`,"data":[`)
 	for i, row := range rows {
 		if i > 0 {
@@ -114,8 +199,6 @@ func writeRows(w http.ResponseWriter, meta sls.GetLogsV3ResponseMeta, rows [][]b
 	}
 	b.WriteString("]}")
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("x-log-progress", "Complete")
-	w.Header().Set("x-log-count", strconv.Itoa(len(rows)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b.Bytes())
 }

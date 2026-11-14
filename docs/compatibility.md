@@ -11,6 +11,7 @@ sls-local 的目标是：**SLS 的客户端（SDK、LoongCollector、Grafana 数
 | GetHistograms | ✅ | 自动间隔与 SLS 一致（7 天以上的档位是外推） |
 | GetContextLogs | ✅ | 依赖 `\| with_pack_meta` 返回的 `__pack_meta__` |
 | GetIndex | ✅ | 返回配置的索引；自动索引时列出最近一天出现过的字段 |
+| ListShards、GetCursor | ✅ | 一个 shard；游标是写入序号 |
 | ListLogStores、GetLogStore、GetProject | ✅ | |
 | 旧版 GetLogs（`GET ?type=log`） | ❌ | 用 GetLogsV3 |
 | CreateLogStore、CreateIndex、UpdateIndex | ❌ | logstore 在写入时自动创建，索引写在配置文件里 |
@@ -25,18 +26,22 @@ sls-local 的目标是：**SLS 的客户端（SDK、LoongCollector、Grafana 数
 | 全文检索、相邻裸词（隐式 and）、`"短语"` | ✅ |
 | `and`、`or`、`not`（一元与二元）、括号 | ✅ |
 | 词内与词尾通配 `pai*`、`p*d`、`a?c`；`key: *` 字段存在 | ✅ |
+| 全文检索匹配字段名、`__source__`（不匹配数值字段的值与 tag） | ✅ |
 | 前导通配 `*abc` | 报错，与 SLS 一致 |
 | long / double：`key: 68`、`>`、`>=`、`<`、`<=`、`=`、`in [a b]`、`in (a b]` | ✅ |
-| `__topic__`、`__source__`、`__tag__:x` | ✅（tag 需在索引里声明，自动索引时都可用） |
+| `__topic__`、`__source__`、`__tag__:x` | ✅（没有索引的 tag 按整个值匹配） |
 | 字段的分词符、大小写敏感、JSON 子键 `a.b` | ✅ 按索引配置 |
-| 中文分词（chn）、全文索引的 include_keys / exclude_keys、别名（alias） | ❌ |
+| 中文分词（chn）、全文索引的 include_keys / exclude_keys | ❌ |
 
 ## SPL
 
 | 指令 | 状态 |
 |---|---|
-| `\| where <表达式>`（可多个）、`\| with_pack_meta` | ✅ 字段是 varchar，`__time__` 是数值，与 SLS 一致 |
-| `extend`、`project`、`parse-json`、`parse-regexp` 等 | ❌ 返回 NotSupported |
+| `\| where <表达式>`（可多个）、`\| with_pack_meta` | ✅ 字段是 varchar，`__time__` 是数值；`cast` 失败时是 null |
+| `extend`、`project`、`project-away`、`parse-json` | ✅ |
+| `parse-regexp 字段, '正则' as a, b`、`parse-kv 字段, '分隔符', '键值分隔符'`、`parse-kv -regexp 字段, '正则'` | ✅ 解析出的字段可以被后面的命令引用 |
+| `stats`、`sort`、`limit` | 与云端一样报错（云端这一版 SPL 不支持） |
+| `parse-csv` 等其他指令 | ❌ 返回 NotSupported |
 
 ## SQL
 
@@ -51,7 +56,17 @@ sls-local 的目标是：**SLS 的客户端（SDK、LoongCollector、Grafana 数
 | JSON | `json_extract`、`json_extract_scalar`、`json_array_length`、`json_size`、`json_parse`、`json_format`（字段值不是合法 JSON 时为 null） |
 | 数组与 map | `array[…]`、`cardinality`、`contains`、`element_at`、`array_join`、`array_distinct`、`array_max`、`array_min`、`array_sort`、`array_position`、`slice`、`sequence`、`filter`、`transform`、`map`、`map_keys`、`map_values` |
 | 数学与条件 | `abs`、`ceil`、`floor`、`round`、`sqrt`、`power`、`mod`、`ln`、`log2`、`log10`、三角函数、`greatest`、`least`、`if`、`coalesce`、`nullif`、`try`、`typeof`、`cast`、`try_cast` |
-| 未实现 | `compare`、`ip_to_*`、`numeric_histogram`、其他 SLS 特有函数（报 `Function … not registered`）；`select *`（log 上）、`grouping sets`、`rollup`、`cube` |
+| 同比环比 | `compare(x, n1, n2…)`：x 是 FROM 子查询的一列，子查询在往前平移 n 秒的时间范围上再算一遍；可以按子查询的列 group by |
+| 未实现 | `ip_to_*`、`numeric_histogram`、其他 SLS 特有函数（报 `Function … not registered`）；`select *`（log 上）、`grouping sets`、`rollup`、`cube` |
+
+## 有意不实现
+
+sls-local 的定位是本地开发用的日志服务。SLS 有、而日志系统通常不需要的能力（以 Loki 为参照：Loki 也没有的）不实现：
+
+- 中文分词（`chn`）：中文仍按分词符切词，整段中文是一个词。
+- `ip_to_*` 等 IP 地理函数（需要 IP 库；Loki 只在采集端做 geoip）。
+- `numeric_histogram`、`time_series` 的补空桶。
+- 估算函数的算法：`approx_distinct`、`approx_percentile` 返回精确值。
 
 ## 已知差异
 

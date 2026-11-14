@@ -62,7 +62,7 @@
 
 ## 返回的行
 
-- 字段顺序：写入字段 → `__topic__` → `__source__` → `__tag__:*` → （`__pack_meta__`）→ `__time__` → `__time_ns_part__`。
+- 字段顺序：写入字段 → （`__pack_meta__`）→ `__topic__` → `__source__` → `__tag__:*` → `__time__` → `__time_ns_part__`（golden 更正：`__pack_meta__` 在 `__topic__` 之前）。
 - **没有** `__tag__:__receive_time__`。
 - `meta.keys` 是返回行的键并集（不含 `__time__`、`__time_ns_part__`），按出现顺序。
 
@@ -138,6 +138,43 @@
 - `1/0` 报 `/ by zero`；`cast('a' as bigint)` 报 `ErrorType:SyntaxError.ErrorMessage:Can not cast 'a' to BIGINT`。
 - `url_encode` 把空格编码成 `+`；`geometric_mean` 遇到负数是 `NaN`；`at time zone 'UTC'` 的类型是 `timestamp with time zone`，值形如 `2026-11-14 13:15:00.000 UTC`。
 
+# 响应格式、检索与 SPL（golden，2026-11-14）
+
+## GetLogsV3 的 meta
+
+- 字段顺序固定：`count, progress, processedRows, processedBytes, elapsedMillisecond, hasSQL, telementryType, telemetryType, whereQuery, aggQuery`，SQL 再加 `cpuSec, cpuCores, powerSql, insertedSQL`，然后 `keys, terms`，SQL 没写 LIMIT 时 `limited: 100`，SPL 有 `new_mode: 4, scanBytes: 0`，最后 `isAccurate: true`，SQL 再加 `columnTypes`。拼错的 `telementryType` 与正确的 `telemetryType` 同时返回。
+- `processedRows`：检索与 SPL 是返回的行数；SQL 是最外层读到的日志条数——WHERE 里能下推到索引的条件（数值字段与常量比较、文本字段 `=`/`in` 字符串，按索引不区分大小写）过滤后的条数，不下推的条件（like、is null 等）不算；没有表的 select 是 0；不聚合的 SQL 凑够 LIMIT 后提前停止扫描（不可预测）。
+- `whereQuery`：只有检索时是原文；带 SQL 或 SPL 时是 `|` 之前的原文（含末尾空格）；只有 `| with_pack_meta` 时是整条语句。`aggQuery`：SQL 是 `|` 之后的原文，SPL 是 `*` 加上 `|` 及之后的原文。
+- `keys`：结果为空时没有；最多 20 个。`terms`：检索词，键名按索引里的写法，数值字段记作 `*`，文本按分词符切词并转小写（短语里的词按字母序），通配符不切；`not x` 末尾补 `*`；空语句为每个中文分词字段列一个空词再加 `*`。
+- GetLogsV3 不带 `x-log-count`、`x-log-progress` 头（只有 GetHistograms 带）。
+
+## 检索
+
+- 全文检索匹配 `__source__`、字段名与字段值，但匹配不到 long/double 字段的值，也匹配不到 tag。
+- 没有索引的 tag 按整个值匹配，区分大小写，支持词尾通配与 `*`。
+- `__topic__: *` 什么也匹配不到；`key : value`（冒号前有空格）可以；值里有不带引号的冒号报 `unexpected COLON`。
+- long 字段的比较只取数值开头的整数部分（`300.5` → 300、`3e2` → 3）；`key: 值` 的相等匹配要求整个值是数（`6*` 匹配不到）。
+- 语句意外结束的报错带位置：`unexpected $end error position is from column:14 to column:17,error near < and >`；括号没有闭合时还列出 `expecting AND or OR or NOT or RIGHTBRACKET`。
+- `from > to` 报 400 `InvalidTimeRange`：`Time Range <from> to <to> is invalid`。
+
+## compare
+
+- `compare(x, n1, n2…)` 返回 `array(double)`：`[当前值, n1 秒前的值, n2 秒前的值…, 当前/n1 前的值, 当前/n2 前的值…]`；x 是 FROM 子查询的一列（直接写聚合报 `Cannot nest aggregations inside aggregation 'compare': ["count"(*)]`），子查询在往前平移 n 秒的时间范围上用同样的检索条件再算一遍；可以按子查询的列 group by，两边按这些列对应；历史值为 0 时比值是 `"Infinity"`（数组里写成字符串）。
+
+## 上下文与其他接口
+
+- `__pack_meta__` 是 `shard|游标（数字串的 base64）|包的条数|在包里的序号`；带 `| with_pack_meta` 时它在写入字段之后、`__topic__` 之前，也出现在 `meta.keys` 里。
+- GetContextLogs 在 `logs` 之后返回 `total_lines`；超过 100 行按 100 返回；两边都为 0 时报 `back/forward_linesback_lines or forward_lines must be positive`（原文如此）。
+- GetHistograms 每个桶的字段顺序是 `from, count, to, progress`；语句带 SQL 时忽略 SQL 部分。
+- GetIndex：顶层字段按字母序；每个字段先是取了非默认值的属性（按字母序），再是取默认值的 `alias`、`caseSensitive`、`chn`。GetLogStore、ListShards、GetCursor 的字段见 internal/api/logstore.go。
+
+## SPL
+
+- 字段都是 varchar（`__time__` 是数值）；`where` 里 varchar 与整数比较报 Presto 的函数签名错误（`line 1:4: Scalar function signature is not supported: gt(VARCHAR, INTEGER). ...`），与字符串比较按字符串比较；`cast` 转换失败时是 null。
+- `extend x = 表达式`、`project a, b`（保留 `__tag__:__pack_id__` 在最前，其余按列出的顺序）、`project-away a`、`parse-json f`（顶层成员展开成字段）。输出的列序按各行字段首次出现的顺序统一排列，新增的字段在后。
+- `parse-regexp 字段, '正则' as a, b`：捕获组依次成为字段，没匹配上的行不增加字段。`parse-kv 字段, '分隔符', '键值分隔符'`：分隔符是整个字符串（`'?&'` 不会在 `?` 处切），每段在第一个键值分隔符处分开，没有分隔符的段忽略；`parse-kv -regexp 字段, '正则'` 的两个捕获组是键、值，取全部匹配。解析出的字段可以被后面的 `where` 引用。`parse-kv -delims=...` 这种写法报 `no viable alternative`。
+- `stats count() by level` 报 `missing EQ at '('`；`sort`、`limit` 报 `this spl is not supported translate to sql, column cannot be predicted`；语法错误是 ANTLR 的原文 `line 1:<列> <消息>`，列号从 0 起、按 aggQuery 计算。
+
 # 已知差异（sls-local 与真实 SLS）
 
 逐条的差异与原因见 `testdata/golden/known-diffs.json`。主要的几类：
@@ -145,7 +182,8 @@
 - **SQL 估算函数**：`approx_distinct`（HyperLogLog）、`approx_percentile`（qdigest）在 sls-local 上是精确值；`numeric_histogram`、`compare`、`ip_to_*` 未实现。
 - **哈希顺序**：`array_agg`、`map_agg`、`histogram` 结果里元素的顺序，以及 order by 并列行的顺序，与 Presto 的内部顺序不同。
 - **time_series** 不补齐没有数据的桶；`at time zone` 只支持 `'UTC'`。
-- **SPL** 只有 `where`；`extend`、`project`、`parse-json` 等未实现。
+- **SPL** 的 `stats`、`sort`、`limit` 等与云端一样报错；个别 SPL 在云端走另一种执行模式（meta 带 `mode`、`phraseQueryInfo`），字段顺序不同。
+- **中文分词（chn）** 未实现：需要与 SLS 相同的词典；`terms` 里的少数内部编码与顺序无法复现。
 - **自动索引**（没有配置索引）时所有字段都是 varchar：数值统计要写 `cast`，或在配置里声明 long/double。
 - **全文索引的 include_keys/exclude_keys** 不生效；没有全文索引时的报错文案未与真实 SLS 对照。
 - **直方图间隔**超过 7 天跨度时的档位是外推的。

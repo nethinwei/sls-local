@@ -3,6 +3,7 @@
 package index
 
 import (
+	"sort"
 	"strings"
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
@@ -18,6 +19,7 @@ type Field struct {
 	Tokens        string // 分词符
 	CaseSensitive bool
 	DocValue      bool // 开启统计，可用于 SQL
+	Chn           bool // 中文分词
 	sub           map[string]*Field
 }
 
@@ -48,7 +50,7 @@ func FromConfig(raw *sls.Index) *Index {
 		ix.Line = &Field{Type: "text", Tokens: tokens(raw.Line.Token), CaseSensitive: raw.Line.CaseSensitive}
 	}
 	for name, k := range raw.Keys {
-		f := &Field{Name: name, Type: k.Type, Tokens: tokens(k.Token), CaseSensitive: k.CaseSensitive, DocValue: k.DocValue}
+		f := &Field{Name: name, Type: k.Type, Tokens: tokens(k.Token), CaseSensitive: k.CaseSensitive, DocValue: k.DocValue, Chn: k.Chn}
 		if f.Type == "" {
 			f.Type = "text"
 		}
@@ -119,4 +121,27 @@ func (ix *Index) LookupSQL(key string) (f *Field, path []string, ok bool) {
 		return f, nil, true
 	}
 	return nil, nil, false
+}
+
+// ChnKeys 返回开启了中文分词的字段名（按名字排序）。
+func (ix *Index) ChnKeys() []string {
+	var out []string
+	for _, f := range ix.keys {
+		if f.Chn {
+			out = append(out, f.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// NumericKeys 返回按 long/double 建了索引的字段（小写）；它们的值不进全文索引。
+func (ix *Index) NumericKeys() map[string]bool {
+	out := map[string]bool{}
+	for k, f := range ix.keys {
+		if f.Type == "long" || f.Type == "double" {
+			out[k] = true
+		}
+	}
+	return out
 }

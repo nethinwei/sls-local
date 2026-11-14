@@ -12,7 +12,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "invalid query: line 1:4: Scalar function signature is not supported: gt(VARCHAR, INTEGER). Supported signatures: (uuid,uuid) -> boolean, (__user_T1,__user_T1) -> boolean, (ipaddress,ipaddress) -> boolean, (varbinary,varbinary) -> boolean, (varchar,varchar) -> boolean, (timestamp,timestamp) -> boolean, (boolean,boolean) -> boolean, (timestamp with time zone,timestamp with time zone) -> boolean, (tinyint,tinyint) -> boolean, (smallint,smallint) -> boolean, (integer,integer) -> boolean, (bigint,bigint) -> boolean, (real,real) -> boolean, (double,double) -> boolean, (date,date) -> boolean, (interval day to second,interval day to second) -> boolean, (interval year to month,interval year to month) -> boolean, (DECIMAL(a_precision,a_scale),DECIMAL(a_precision,a_scale)) -> boolean."
+          "errorMessage": "invalid query: line 1:4: Scalar function signature is not supported: gt(VARCHAR, INTEGER). Supported signatures: (uuid,uuid) -\u003e boolean, (__user_T1,__user_T1) -\u003e boolean, (ipaddress,ipaddress) -\u003e boolean, (varbinary,varbinary) -\u003e boolean, (varchar,varchar) -\u003e boolean, (timestamp,timestamp) -\u003e boolean, (boolean,boolean) -\u003e boolean, (timestamp with time zone,timestamp with time zone) -\u003e boolean, (tinyint,tinyint) -\u003e boolean, (smallint,smallint) -\u003e boolean, (integer,integer) -\u003e boolean, (bigint,bigint) -\u003e boolean, (real,real) -\u003e boolean, (double,double) -\u003e boolean, (date,date) -\u003e boolean, (interval day to second,interval day to second) -\u003e boolean, (interval year to month,interval year to month) -\u003e boolean, (DECIMAL(a_precision,a_scale),DECIMAL(a_precision,a_scale)) -\u003e boolean."
         }
       }
     },
@@ -171,7 +171,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": "*| where cast(latency_ms as bigint) > 300",
+            "aggQuery": "*| where cast(latency_ms as bigint) \u003e 300",
             "keys": [
               "level",
               "msg",
@@ -441,7 +441,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": "*| where latency_ms > '300'",
+            "aggQuery": "*| where latency_ms \u003e '300'",
             "keys": [
               "level",
               "msg",
@@ -702,7 +702,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "invalid query: line 1:16 mismatched input ':' expecting <EOF>"
+          "errorMessage": "invalid query: line 1:16 mismatched input ':' expecting \u003cEOF\u003e"
         }
       }
     },
@@ -1117,7 +1117,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": "*| extend c = cast(latency_ms as bigint) | where c > 1000",
+            "aggQuery": "*| extend c = cast(latency_ms as bigint) | where c \u003e 1000",
             "keys": [
               "level",
               "msg",
@@ -1719,6 +1719,823 @@
               "__tag__:__pack_id__": "5EED00000000C003-1",
               "__time__": "1793842032",
               "__time_ns_part__": "194192371"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-regexp",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "service: checkout and level: ERROR ",
+            "aggQuery": "*| parse-regexp msg, '(\\w+) failed: (.*)' as action, reason",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "action",
+              "reason"
+            ],
+            "terms": [
+              {
+                "term": "checkout",
+                "key": "service"
+              },
+              {
+                "term": "error",
+                "key": "level"
+              }
+            ],
+            "new_mode": 4,
+            "scanBytes": 0,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "action": "payment",
+              "reason": "card declined",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "action": "payment",
+              "reason": "card declined",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "action": "payment",
+              "reason": "card declined",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "action": "payment",
+              "reason": "card declined",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "action": "payment",
+              "reason": "card declined",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-regexp-nomatch",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "service: auth ",
+            "aggQuery": "*| parse-regexp msg, '(\\d+)' as n",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "user_id",
+              "ip",
+              "ua",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "resource"
+            ],
+            "terms": [
+              {
+                "term": "auth",
+                "key": "service"
+              }
+            ],
+            "new_mode": 4,
+            "scanBytes": 0,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "user login",
+              "service": "auth",
+              "user_id": "81279",
+              "ip": "203.0.113.81",
+              "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)",
+              "__topic__": "audit",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/audit.log",
+              "__tag__:__pack_id__": "5EED00000000C003-1",
+              "__time__": "1793842028",
+              "__time_ns_part__": "784100825"
+            },
+            {
+              "level": "INFO",
+              "msg": "user login",
+              "service": "auth",
+              "user_id": "17235",
+              "ip": "203.0.113.127",
+              "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)",
+              "__topic__": "audit",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/audit.log",
+              "__tag__:__pack_id__": "5EED00000000C003-1",
+              "__time__": "1793842029",
+              "__time_ns_part__": "547226270"
+            },
+            {
+              "level": "INFO",
+              "msg": "user login",
+              "service": "auth",
+              "user_id": "74366",
+              "ip": "203.0.113.156",
+              "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)",
+              "__topic__": "audit",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/audit.log",
+              "__tag__:__pack_id__": "5EED00000000C003-1",
+              "__time__": "1793842030",
+              "__time_ns_part__": "779759077"
+            },
+            {
+              "level": "WARN",
+              "msg": "permission denied",
+              "service": "auth",
+              "user_id": "12067",
+              "__topic__": "audit",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/audit.log",
+              "__tag__:__pack_id__": "5EED00000000C003-1",
+              "resource": "/admin/users",
+              "__time__": "1793842031",
+              "__time_ns_part__": "283640231"
+            },
+            {
+              "level": "WARN",
+              "msg": "permission denied",
+              "service": "auth",
+              "user_id": "11648",
+              "__topic__": "audit",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/audit.log",
+              "__tag__:__pack_id__": "5EED00000000C003-1",
+              "resource": "/admin/users",
+              "__time__": "1793842032",
+              "__time_ns_part__": "194192371"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-regexp-where",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 12,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "service: checkout ",
+            "aggQuery": "*| parse-regexp url, '/api/v1/(\\w+)/(\\d+)' as kind, id | where kind = 'orders'",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "method",
+              "url",
+              "http_status",
+              "latency_ms",
+              "kind",
+              "id"
+            ],
+            "terms": [
+              {
+                "term": "checkout",
+                "key": "service"
+              }
+            ],
+            "new_mode": 2,
+            "mode": 2,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793842032
+            },
+            "scanBytes": 4636,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "trace_id": "1551ab3219257b9c9fe07ac246908cbe",
+              "span_id": "5d0e4794d0c38b19",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "method": "GET",
+              "url": "/api/v1/orders/406",
+              "http_status": "200",
+              "latency_ms": "6",
+              "kind": "orders",
+              "id": "406",
+              "__time__": "1793842027",
+              "__time_ns_part__": "309882609"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "trace_id": "5b57ecca60e1b1ef56b2348e8aafe7bc",
+              "span_id": "4937a8a6e8728925",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "method": "GET",
+              "url": "/api/v1/orders/241",
+              "http_status": "200",
+              "latency_ms": "17",
+              "kind": "orders",
+              "id": "241",
+              "__time__": "1793842031",
+              "__time_ns_part__": "329757216"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "trace_id": "538e9b83643020f862cdcaa09ffed832",
+              "span_id": "9405cdb86e9a6a68",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "method": "GET",
+              "url": "/api/v1/orders/178",
+              "http_status": "500",
+              "latency_ms": "62",
+              "kind": "orders",
+              "id": "178",
+              "__time__": "1793842031",
+              "__time_ns_part__": "532923025"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "trace_id": "6b82cb4dd81c16135b0ffd31d626117a",
+              "span_id": "0fb97d8a3faccdf5",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "method": "GET",
+              "url": "/api/v1/orders/57",
+              "http_status": "200",
+              "latency_ms": "281",
+              "kind": "orders",
+              "id": "57",
+              "__time__": "1793842032",
+              "__time_ns_part__": "17255204"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "trace_id": "e61cfb1e4c808e59b79ed73d99be9c03",
+              "span_id": "965712d7454e8c05",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "method": "GET",
+              "url": "/api/v1/orders/371",
+              "http_status": "500",
+              "latency_ms": "118",
+              "kind": "orders",
+              "id": "371",
+              "__time__": "1793842032",
+              "__time_ns_part__": "810358895"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-kv",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "url: search ",
+            "aggQuery": "*| parse-kv url, '\u0026', '='",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "url",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "/api/v1/search?q",
+              "page"
+            ],
+            "terms": [
+              {
+                "term": "search",
+                "key": "url"
+              }
+            ],
+            "new_mode": 4,
+            "scanBytes": 0,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "path with query",
+              "service": "checkout",
+              "url": "/api/v1/search?q=red+shoes\u0026page=2",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-E",
+              "/api/v1/search?q": "red+shoes",
+              "page": "2",
+              "__time__": "1793842541",
+              "__time_ns_part__": "777501163"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-kv-delims",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "url: search ",
+            "aggQuery": "*| parse-kv url, '?\u0026', '='",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "url",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "/api/v1/search?q"
+            ],
+            "terms": [
+              {
+                "term": "search",
+                "key": "url"
+              }
+            ],
+            "new_mode": 4,
+            "scanBytes": 0,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "path with query",
+              "service": "checkout",
+              "url": "/api/v1/search?q=red+shoes\u0026page=2",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-E",
+              "/api/v1/search?q": "red+shoes\u0026page=2",
+              "__time__": "1793842541",
+              "__time_ns_part__": "777501163"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-kv-regexp",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "url: search ",
+            "aggQuery": "*| parse-kv -regexp url, '([a-z]+)=([^\u0026]+)'",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "url",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "q",
+              "page"
+            ],
+            "terms": [
+              {
+                "term": "search",
+                "key": "url"
+              }
+            ],
+            "new_mode": 4,
+            "scanBytes": 0,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "path with query",
+              "service": "checkout",
+              "url": "/api/v1/search?q=red+shoes\u0026page=2",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-E",
+              "q": "red+shoes",
+              "page": "2",
+              "__time__": "1793842541",
+              "__time_ns_part__": "777501163"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-kv-where",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "url: search ",
+            "aggQuery": "*| parse-kv -regexp url, '([a-z]+)=([^\u0026]+)' | where page = '2'",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "url",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "q",
+              "page"
+            ],
+            "terms": [
+              {
+                "term": "search",
+                "key": "url"
+              }
+            ],
+            "new_mode": 2,
+            "mode": 2,
+            "phraseQueryInfo": {
+              "scanAll": true,
+              "beginOffset": 0,
+              "endOffset": 1,
+              "endTime": 1793842541
+            },
+            "scanBytes": 275,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "path with query",
+              "service": "checkout",
+              "url": "/api/v1/search?q=red+shoes\u0026page=2",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-E",
+              "q": "red+shoes",
+              "page": "2",
+              "__time__": "1793842541",
+              "__time_ns_part__": "777501163"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "parse-kv-nopair",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "service: checkout and url: orders ",
+            "aggQuery": "*| parse-kv url, '\u0026', '='",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "method",
+              "url",
+              "http_status",
+              "latency_ms",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "checkout",
+                "key": "service"
+              },
+              {
+                "term": "orders",
+                "key": "url"
+              }
+            ],
+            "new_mode": 4,
+            "scanBytes": 0,
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "method": "GET",
+              "url": "/api/v1/orders/406",
+              "http_status": "200",
+              "latency_ms": "6",
+              "trace_id": "1551ab3219257b9c9fe07ac246908cbe",
+              "span_id": "5d0e4794d0c38b19",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "309882609"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "method": "GET",
+              "url": "/api/v1/orders/241",
+              "http_status": "200",
+              "latency_ms": "17",
+              "trace_id": "5b57ecca60e1b1ef56b2348e8aafe7bc",
+              "span_id": "4937a8a6e8728925",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842031",
+              "__time_ns_part__": "329757216"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "method": "GET",
+              "url": "/api/v1/orders/178",
+              "http_status": "500",
+              "latency_ms": "62",
+              "trace_id": "538e9b83643020f862cdcaa09ffed832",
+              "span_id": "9405cdb86e9a6a68",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842031",
+              "__time_ns_part__": "532923025"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "method": "GET",
+              "url": "/api/v1/orders/57",
+              "http_status": "200",
+              "latency_ms": "281",
+              "trace_id": "6b82cb4dd81c16135b0ffd31d626117a",
+              "span_id": "0fb97d8a3faccdf5",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842032",
+              "__time_ns_part__": "17255204"
+            },
+            {
+              "level": "INFO",
+              "msg": "request completed",
+              "service": "checkout",
+              "method": "GET",
+              "url": "/api/v1/orders/371",
+              "http_status": "500",
+              "latency_ms": "118",
+              "trace_id": "e61cfb1e4c808e59b79ed73d99be9c03",
+              "span_id": "965712d7454e8c05",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842032",
+              "__time_ns_part__": "810358895"
             }
           ]
         }

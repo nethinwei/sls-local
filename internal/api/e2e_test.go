@@ -183,11 +183,12 @@ func TestEndToEnd(t *testing.T) {
 	}
 	from, to := base.Unix(), base.Add(250*time.Second).Unix()+1
 	count := func(t *testing.T, logstore, q string) (int64, error) {
-		res, err := getLogs(c, logstore, &sls.GetLogRequest{From: from, To: to, Query: q, Lines: 1})
+		// 命中总数用直方图数：GetLogsV3 的 processedRows 只是这次返回的行数（与 SLS 一致）
+		h, err := c.GetHistograms("devproj", logstore, "", from, to, q)
 		if err != nil {
 			return 0, err
 		}
-		return res.meta.ProcessedRows, nil
+		return h.Count, nil
 	}
 
 	t.Run("logstore", func(t *testing.T) {
@@ -206,21 +207,23 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("newest first, field order, pack meta, keys", func(t *testing.T) {
 		res := mustGetLogs(t, c, "devstore", &sls.GetLogRequest{From: from, To: to, Query: "* | with_pack_meta", Lines: 100, Reverse: true})
-		if res.meta.Progress != "Complete" || res.meta.Count != 100 || len(res.rows) != 100 || res.meta.ProcessedRows != 250 {
+		if res.meta.Progress != "Complete" || res.meta.Count != 100 || len(res.rows) != 100 || res.meta.ProcessedRows != 100 {
 			t.Fatalf("meta = %+v rows=%d", res.meta, len(res.rows))
 		}
 		if res.rows[0]["trace_id"] != "trace249" || res.rows[99]["trace_id"] != "trace150" {
 			t.Fatalf("order: first %s last %s", res.rows[0]["trace_id"], res.rows[99]["trace_id"])
 		}
-		want := "level,msg,service_name,trace_id,cost_ms,elapsed_ms,product_id,uid,__topic__,__source__," +
-			"__tag__:__path__,__tag__:__pack_id__,__pack_meta__,__time__,__time_ns_part__"
+		// __pack_meta__ 紧跟写入字段、在 __topic__ 之前（golden：spl/with-pack-meta）
+		want := "level,msg,service_name,trace_id,cost_ms,elapsed_ms,product_id,uid,__pack_meta__,__topic__,__source__," +
+			"__tag__:__path__,__tag__:__pack_id__,__time__,__time_ns_part__"
 		if got := strings.Join(res.keys[0], ","); got != want {
 			t.Fatalf("keys = %s\nwant %s", got, want)
 		}
 		if res.rows[0]["__time_ns_part__"] != "123000000" {
 			t.Fatalf("ns = %s", res.rows[0]["__time_ns_part__"])
 		}
-		wantKeys := "level,msg,service_name,trace_id,cost_ms,elapsed_ms,product_id,uid,__topic__,__source__,__tag__:__path__,__tag__:__pack_id__"
+		// meta.keys 也包含 __pack_meta__（golden：spl/with-pack-meta）
+		wantKeys := "level,msg,service_name,trace_id,cost_ms,elapsed_ms,product_id,uid,__pack_meta__,__topic__,__source__,__tag__:__path__,__tag__:__pack_id__"
 		if got := strings.Join(res.meta.Keys, ","); got != wantKeys {
 			t.Fatalf("meta.keys = %s", got)
 		}
@@ -306,7 +309,6 @@ func TestEndToEnd(t *testing.T) {
 			"product_id: 2005":          fmt.Sprintf(notIndexed, "product_id"),
 			"__tag__:__path__: *order*": "only support * or ?  in the  middle or end  of the query",
 			"level: INFO msg: paid":     "parse search query error,please read query syntax document,error detail:syntax error, unexpected TERM, expecting $end error position is from column:13 to column:16,error near < msg >",
-			"* | where (select 1) = 1":  `invalid query: "select" is not allowed in an expression`,
 		}
 		for q, want := range cases {
 			_, err := count(t, "devstore", q)
@@ -315,10 +317,14 @@ func TestEndToEnd(t *testing.T) {
 				t.Errorf("%q: err = %v\nwant ParameterInvalid %s", q, err, want)
 			}
 		}
-		// 与 SLS 一样，varchar 与整数比较是类型错误（文案来自 DuckDB）
+		// SPL 的表达式只针对一行，不能有子查询（读不到其他日志）
+		if _, err := count(t, "devstore", "* | where (select 1) = 1"); slsError(err) == nil || slsError(err).Code != "ParameterInvalid" {
+			t.Errorf("subquery in where: err = %v", err)
+		}
+		// 与 SLS 一样，SPL 里 varchar 与整数比较是 Presto 的函数签名错误（golden：spl/where-long）
 		_, err := count(t, "devstore", "* | where cost_ms > 50")
-		wantMsg := "invalid query: Binder Error: Cannot compare values of type VARCHAR and type INTEGER_LITERAL - an explicit cast is required"
-		if se := slsError(err); se == nil || se.Code != "ParameterInvalid" || se.Message != wantMsg {
+		wantPrefix := "invalid query: line 1:4: Scalar function signature is not supported: gt(VARCHAR, INTEGER). Supported signatures: (uuid,uuid) -> boolean"
+		if se := slsError(err); se == nil || se.Code != "ParameterInvalid" || !strings.HasPrefix(se.Message, wantPrefix) {
 			t.Errorf("varchar > int: err = %v", err)
 		}
 	})

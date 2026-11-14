@@ -32,5 +32,5 @@ func translatePresto(src string, ix *index.Index, logstore string) (*SQLStmt, er
 		}
 		return nil, err
 	}
-	return &SQLStmt{SQL: st.SQL, Args: st.Args, InsertAt: st.InsertAt, Types: st.Types}, nil
+	return &SQLStmt{SQL: st.SQL, Args: st.Args, InsertAt: st.InsertAt, Types: st.Types, DefaultLimit: st.DefaultLimit, Processed: st.Processed, Shifts: st.Shifts, Text: src}, nil
 }

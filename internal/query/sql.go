@@ -27,6 +27,14 @@ type SQLStmt struct {
 	InsertAt int
 	// Types 是翻译器推断出的列类型（SLS 的写法），为空的列用 DuckDB 的类型
 	Types []string
+	// DefaultLimit 表示用了默认的 LIMIT 100
+	DefaultLimit bool
+	// Shifts 是 compare 用到的时间偏移（秒），见 presto.Stmt.Shifts
+	Shifts []int64
+	// Processed 是 meta.processedRows 的计算式（为空时取检索条件命中的条数）
+	Processed string
+	// Text 是 SQL 部分的原文（"|" 之后到下一个 "|"），InsertAt 相对于它
+	Text string
 	// funcPos 记录每个函数名第一次出现的列号（从 1 起，相对于 "|" 之后的文本），DuckDB 报函数不存在时用它
 	// 拼出 SLS 格式的报错。
 	funcPos map[string]int
@@ -48,10 +56,13 @@ const (
 )
 
 // CTE 返回 WITH log AS (...) 的定义：base 是 logs 表上的过滤条件（project、时间范围、检索）。
-func CTE(base string) string {
-	return "WITH log AS (SELECT t AS " + colTime + ", ns AS " + colNs + ", topic AS " + colTopic +
+func CTE(base string) string { return "WITH " + CTEDef("log", base) + " " }
+
+// CTEDef 是一个 log 形式的表定义：name AS (...)。compare 的 log__shift_<n> 也用它。
+func CTEDef(name, base string) string {
+	return name + " AS (SELECT t AS " + colTime + ", ns AS " + colNs + ", topic AS " + colTopic +
 		", source AS " + colSource + ", tags AS " + colTags + ", contents AS " + colContents +
-		" FROM logs WHERE " + base + ") "
+		" FROM logs WHERE " + base + ")"
 }
 
 // sqlKeywords 是原样保留的 SQL 关键字（不当作字段名）。

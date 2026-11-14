@@ -46,6 +46,7 @@ func (s *Server) putLogs(w http.ResponseWriter, r *http.Request, project string)
 		}
 		group.Logs = append(group.Logs, log)
 	}
+	group.NumericKeys = s.index(project, logstore).NumericKeys()
 	if err := s.store.Append(r.Context(), project, logstore, group); err != nil {
 		s.fail(w, r, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return

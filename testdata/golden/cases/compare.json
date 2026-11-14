@@ -1,0 +1,10 @@
+[
+{"name": "single", "op": "logs", "query": "* | select compare(c, 300) as r from (select count(*) as c from log)"},
+{"name": "multi", "op": "logs", "query": "* | select compare(c, 300, 600) as r from (select count(*) as c from log)"},
+{"name": "window", "op": "logs", "query": "* | select compare(c, 300) as r from (select count(*) as c from log)", "from": 600, "to": 900},
+{"name": "grouped", "op": "logs", "query": "* | select level, compare(c, 300) as r from (select level, count(*) as c from log group by level) group by level order by level"},
+{"name": "search", "op": "logs", "query": "level: ERROR | select compare(c, 300) as r from (select count(*) as c from log)", "from": 600, "to": 900},
+{"name": "avg", "op": "logs", "query": "* | select compare(a, 300) as r from (select avg(latency_ms) as a from log)", "from": 600, "to": 900},
+{"name": "unnest", "op": "logs", "query": "* | select r[1] as now, r[2] as before, r[3] as ratio from (select compare(c, 300) as r from (select count(*) as c from log))", "from": 600, "to": 900},
+{"name": "no-history", "op": "logs", "query": "* | select compare(c, 300) as r from (select count(*) as c from log)", "from": 0, "to": 300}
+]

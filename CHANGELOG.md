@@ -7,6 +7,13 @@
 - SQL 改用基于 Presto 语法（prestodb 的 SqlBase.g4，ANTLR 生成）的翻译器：不写 AS 的别名、乘号、子查询、CTE、UNION、窗口函数等写法都能正确处理；语法错误是 Presto 的原文。设置 `SLS_LOCAL_SQL=legacy` 可临时切回原来的逐记号改写。
 - 列类型、报错文案与列号、double 的文本格式（Grisu2）、`__time___0` 等细节与真实 SLS 一致；新增 `time_series`、窗口函数、`url_extract_*`、`date_add` 等函数；支持索引别名，JSON 子键按嵌套路径取值。
 
+**响应格式与检索**
+
+- meta 的字段、顺序与取值（`processedRows`、`whereQuery`、`aggQuery`、`terms`、`insertedSQL`、`limited`……）、响应头、直方图、上下文（`total_lines`、`__pack_meta__` 的格式）、GetIndex、GetLogStore 与 SLS 一致；新增 ListShards、GetCursor。
+- 检索：全文检索匹配字段名与 `__source__`、不匹配数值字段的值；没有索引的 tag 按整个值匹配；`key : value`；long 字段比较的数值解析与 SLS 相同；语法错误带位置。
+- SPL：新增 `extend`、`project`、`project-away`、`parse-json`、`parse-regexp`、`parse-kv`；表达式用 Presto 语法翻译，报错与 SLS 一致。
+- SQL：新增 `compare`（同比环比）。
+
 **测试**
 
 - golden 对照测试：合成数据写进云端与 sls-local，云端响应录制进仓库，CI 回放并要求只进不退（docs/golden.md）。

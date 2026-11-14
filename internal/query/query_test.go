@@ -87,7 +87,8 @@ func TestSearchCompile(t *testing.T) {
 		{"level: a or not msg: b", "(" + text + " OR (NOT " + text + "))", 4},
 		{"uid: *", "(json_extract_string(contents, ?) IS NOT NULL)", 1},
 		{"__topic__: x", "coalesce(regexp_matches(lower(topic), ?), false)", 1},
-		{"__tag__:__path__: x", "FALSE", 0},
+		// 没有索引的 tag 按整个值匹配（golden：__tag__:__path__: /var/log/app/audit.log 命中，: audit 不命中）
+		{"__tag__:__path__: x", "coalesce(regexp_matches(json_extract_string(tags, ?), ?), false)", 2},
 		{"cost_ms > 50", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS BIGINT) > ?, false)", 2},
 		{"cost_ms: 68", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS BIGINT) = ?, false)", 2},
 		{"cost_ms in (50 60]", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS BIGINT) > ? AND TRY_CAST(json_extract_string(contents, ?) AS BIGINT) <= ?, false)", 4},
@@ -202,7 +203,11 @@ func TestParsePipes(t *testing.T) {
 	if p, err := Parse("level: ERROR | select count(*)", index.Auto()); err != nil || p.SQL == nil || p.Search != "level: ERROR" {
 		t.Fatalf("SQL: %+v, %v", p, err)
 	}
-	if _, err := Parse("* | extend a = 1", index.Auto()); !errors.Is(err, ErrUnsupported) {
+	if _, err := Parse("* | parse-csv a as b", index.Auto()); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("SPL: %v", err)
+	}
+	p, err = Parse("* | extend a = 1 | where a > 0 | project a", index.Auto())
+	if err != nil || len(p.Stages) != 3 || p.Stages[0].Kind != "extend" || p.Stages[2].Fields[0] != "a" {
+		t.Fatalf("SPL stages: %+v, %v", p, err)
 	}
 }

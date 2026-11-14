@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,8 +22,9 @@ type SearchParams struct {
 	FromNs, ToNs      int32
 	Where             query.Cond
 	Limit, Offset     int64
-	Reverse           bool // true：新的在前
-	PackMeta          bool // 每行带上 __pack_meta__
+	Reverse           bool          // true：新的在前
+	PackMeta          bool          // 每行带上 __pack_meta__
+	Stages            []query.Stage // 逐条执行的 SPL 命令
 }
 
 // SearchResult 是检索结果。
@@ -48,8 +50,15 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	if p.Reverse {
 		order = "DESC"
 	}
-	q := fmt.Sprintf(`SELECT seq, t, ns, topic, source, tags, contents, count(*) OVER () AS total
-		FROM logs WHERE %s ORDER BY t %s, coalesce(ns, 0) %s, seq %s LIMIT ? OFFSET ?`, where, order, order, order)
+	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i FROM logs WHERE `+where, p.Stages)
+	extCols := ""
+	for _, c := range ext {
+		extCols += ", " + c
+	}
+	q := fmt.Sprintf(`SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0)%s, count(*) OVER () AS total
+		FROM (%s) ORDER BY t %s, coalesce(ns, 0) %s, seq %s LIMIT ? OFFSET ?`, extCols, src, order, order, order)
+	assemble := needsAssembly(p.Stages)
+	var splRows []splRow
 	rows, err := s.db.QueryContext(ctx, q, append(args, p.Limit, p.Offset)...)
 	if err != nil {
 		return nil, queryError(err)
@@ -59,11 +68,24 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	keys := newKeySet()
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &res.Count); err != nil {
+		extVals := make([]any, len(ext))
+		dest := []any{&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &r.packN, &r.packI}
+		for i := range extVals {
+			dest = append(dest, &extVals[i])
+		}
+		if err := rows.Scan(append(dest, &res.Count)...); err != nil {
 			return nil, err
+		}
+		if assemble {
+			rr := r
+			splRows = append(splRows, (&rr).assemble(p.Stages, extVals, p.PackMeta))
+			continue
 		}
 		res.Rows = append(res.Rows, r.encode(searchLayout, p.PackMeta, 0))
 		keys.addObject(r.contents)
+		if p.PackMeta {
+			keys.add("__pack_meta__")
+		}
 		keys.add("__topic__", "__source__")
 		keys.addObject(r.tags)
 	}
@@ -71,6 +93,9 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 		return nil, queryError(err)
 	}
 	res.Keys = keys.list
+	if assemble {
+		res.Rows, res.Keys = assembleRows(splRows)
+	}
 	// 没有返回行时（offset 越界）窗口函数拿不到总数，单独数一次
 	if len(res.Rows) == 0 && p.Offset > 0 {
 		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+where, args...).Scan(&res.Count); err != nil {
@@ -119,6 +144,7 @@ func queryError(err error) error {
 
 type row struct {
 	seq, t                        int64
+	packN, packI                  int32 // 所在包的条数、在包里的序号
 	ns                            sql.NullInt32
 	topic, source, tags, contents string
 }
@@ -126,7 +152,7 @@ type row struct {
 type layout int
 
 const (
-	// searchLayout：写入字段 → __topic__ → __source__ → tag → (__pack_meta__) → __time__ → __time_ns_part__
+	// searchLayout：写入字段 → (__pack_meta__) → __topic__ → __source__ → tag → __time__ → __time_ns_part__
 	searchLayout layout = iota
 	// contextLayout：__index_number__ → 写入字段 → __pack_meta__ → tag → __time__ → __time_ns_part__，没有 topic/source
 	contextLayout
@@ -159,16 +185,16 @@ func (r *row) encode(l layout, packMeta bool, indexNumber int) []byte {
 	if l == contextLayout {
 		field("__index_number__", strconv.Itoa(indexNumber))
 		raw(r.contents)
-		field("__pack_meta__", PackMeta(r.seq))
+		field("__pack_meta__", PackMeta(r.seq, r.packN, r.packI))
 		raw(r.tags)
 	} else {
 		raw(r.contents)
+		if packMeta {
+			field("__pack_meta__", PackMeta(r.seq, r.packN, r.packI))
+		}
 		field("__topic__", r.topic)
 		field("__source__", r.source)
 		raw(r.tags)
-		if packMeta {
-			field("__pack_meta__", PackMeta(r.seq))
-		}
 	}
 	field("__time__", strconv.FormatInt(r.t, 10))
 	if r.ns.Valid {
@@ -178,18 +204,56 @@ func (r *row) encode(l layout, packMeta bool, indexNumber int) []byte {
 	return b.Bytes()
 }
 
-// PackMeta 是 GetContextLogs 用来定位一条日志的不透明标识；sls-local 用写入序号表示。
-func PackMeta(seq int64) string {
-	return "0|" + strconv.FormatInt(seq, 10) + "|0|0"
+// PackMeta 是 GetContextLogs 用来定位一条日志的标识，格式与 SLS 相同：shard|游标|包的条数|在包里的序号。
+// SLS 的游标是数字串的 base64，sls-local 用写入序号。
+func PackMeta(seq int64, packN, packI int32) string {
+	return "0|" + EncodeCursor(seq) + "|" +
+		strconv.Itoa(int(packN)) + "|" + strconv.Itoa(int(packI))
 }
 
-// ParsePackMeta 从 PackMeta 取回写入序号。
+// EncodeCursor 把写入序号编码成 SLS 形式的游标（数字串的 base64）。
+func EncodeCursor(seq int64) string {
+	return base64.StdEncoding.EncodeToString([]byte(strconv.FormatInt(seq, 10)))
+}
+
+// Cursor 是 GetCursor：begin 是最早一条的序号，end 是最新一条之后，Unix 秒是该时间之后最早的一条。
+func (s *Store) Cursor(ctx context.Context, project, logstore, from string) (int64, error) {
+	var q string
+	var args []any
+	switch from {
+	case "begin":
+		q = `SELECT coalesce(min(seq), 0) FROM logs WHERE project = ? AND logstore = ?`
+	case "end":
+		q = `SELECT coalesce(max(seq), 0) + 1 FROM logs WHERE project = ? AND logstore = ?`
+	default:
+		t, err := strconv.ParseInt(from, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("from must be begin, end or unix seconds")
+		}
+		q = `SELECT coalesce(min(seq), (SELECT coalesce(max(seq), 0) + 1 FROM logs WHERE project = ? AND logstore = ?))
+			FROM logs WHERE project = ? AND logstore = ? AND t >= ?`
+		args = []any{project, logstore}
+		args = append(args, project, logstore, t)
+		var seq int64
+		err = s.db.QueryRowContext(ctx, q, args...).Scan(&seq)
+		return seq, err
+	}
+	var seq int64
+	err := s.db.QueryRowContext(ctx, q, project, logstore).Scan(&seq)
+	return seq, err
+}
+
+// ParsePackMeta 从 PackMeta 取回写入序号（也接受 v0.1 的写法：游标是十进制数字）。
 func ParsePackMeta(meta string) (int64, bool) {
 	parts := strings.Split(meta, "|")
 	if len(parts) != 4 {
 		return 0, false
 	}
-	seq, err := strconv.ParseInt(parts[1], 10, 64)
+	cursor := parts[1]
+	if b, err := base64.StdEncoding.DecodeString(cursor); err == nil {
+		cursor = string(b)
+	}
+	seq, err := strconv.ParseInt(cursor, 10, 64)
 	return seq, err == nil
 }
 
@@ -251,7 +315,7 @@ func (s *Store) Context(ctx context.Context, project, logstore string, seq int64
 	if err != nil {
 		return nil, err
 	}
-	const cols = `SELECT seq, t, ns, topic, source, tags, contents FROM logs WHERE project = ? AND logstore = ? AND pack_ctx = ?`
+	const cols = `SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0) FROM logs WHERE project = ? AND logstore = ? AND pack_ctx = ?`
 	before, err := s.scanRows(ctx, cols+` AND seq < ? ORDER BY seq DESC LIMIT ?`, project, logstore, packCtx.String, seq, back)
 	if err != nil {
 		return nil, err
@@ -279,7 +343,7 @@ func (s *Store) scanRows(ctx context.Context, q string, args ...any) ([]row, err
 	var out []row
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents); err != nil {
+		if err := rows.Scan(&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &r.packN, &r.packI); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

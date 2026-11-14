@@ -1,0 +1,370 @@
+{
+  "base": 1793842027,
+  "logstoreLen": 13,
+  "recordedAt": "2026-11-14",
+  "results": [
+    {
+      "name": "single",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 4425,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select compare(c, 300) as r from (select count(*) as c from log)",
+            "keys": [
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "r": "[2529.0,1896.0,1.3338607594936709]",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "multi",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 5700,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select compare(c, 300, 600) as r from (select count(*) as c from log)",
+            "keys": [
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "r": "[2529.0,1896.0,1275.0,1.3338607594936709,1.983529411764706]",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "window",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1264,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select compare(c, 300) as r from (select count(*) as c from log)",
+            "keys": [
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "r": "[621.0,643.0,0.9657853810264385]",
+              "__source__": "",
+              "__time__": "1793842627"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "grouped",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 4,
+            "progress": "Complete",
+            "processedRows": 4425,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select level, compare(c, 300) as r from (select level, count(*) as c from log group by level) group by level order by level",
+            "keys": [
+              "level",
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "varchar",
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "r": "[165.0,131.0,1.2595419847328245]",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "Error",
+              "r": "[1.0,1.0,1.0]",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "INFO",
+              "r": "[2037.0,1524.0,1.3366141732283466]",
+              "__source__": "",
+              "__time__": "1793842027"
+            },
+            {
+              "level": "WARN",
+              "r": "[326.0,240.0,1.3583333333333335]",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "search",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 88,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "level: ERROR ",
+            "aggQuery": " select compare(c, 300) as r from (select count(*) as c from log)",
+            "keys": [
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "error",
+                "key": "level"
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "r": "[53.0,35.0,1.5142857142857143]",
+              "__source__": "",
+              "__time__": "1793842627"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "avg",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1264,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select compare(a, 300) as r from (select avg(latency_ms) as a from log)",
+            "keys": [
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "r": "[293.9616858237548,302.7752808988764,0.9708906385985148]",
+              "__source__": "",
+              "__time__": "1793842627"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "unnest",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 1264,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select r[1] as now, r[2] as before, r[3] as ratio from (select compare(c, 300) as r from (select count(*) as c from log))",
+            "keys": [
+              "now",
+              "before",
+              "ratio"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "double",
+              "double",
+              "double"
+            ]
+          },
+          "data": [
+            {
+              "now": "621.0",
+              "before": "643.0",
+              "ratio": "0.9657853810264385",
+              "__source__": "",
+              "__time__": "1793842627"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "no-history",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 1,
+            "progress": "Complete",
+            "processedRows": 632,
+            "hasSQL": true,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "* ",
+            "aggQuery": " select compare(c, 300) as r from (select count(*) as c from log)",
+            "keys": [
+              "r"
+            ],
+            "terms": [
+              {
+                "term": "*",
+                "key": ""
+              }
+            ],
+            "limited": 100,
+            "isAccurate": true,
+            "columnTypes": [
+              "array(double)"
+            ]
+          },
+          "data": [
+            {
+              "r": "[632.0,0.0,\"Infinity\"]",
+              "__source__": "",
+              "__time__": "1793842027"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

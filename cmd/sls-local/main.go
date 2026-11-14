@@ -20,6 +20,7 @@ import (
 
 	"github.com/nethinwei/sls-local/internal/api"
 	"github.com/nethinwei/sls-local/internal/config"
+	"github.com/nethinwei/sls-local/internal/index"
 	"github.com/nethinwei/sls-local/internal/store"
 	"github.com/nethinwei/sls-local/internal/tlsutil"
 )
@@ -87,6 +88,19 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl, s
 		if err := st.EnsureLogstore(ctx, project, logstore); err != nil {
 			return err
 		}
+	}
+
+	// 升级后第一次启动：按当前规则重建旧数据的全文列
+	numeric := func(project, logstore string) map[string]bool {
+		if raw, ok := indexes[project+"/"+logstore]; ok {
+			return index.FromConfig(raw).NumericKeys()
+		}
+		return nil
+	}
+	if n, err := st.RebuildFulltext(ctx, numeric); err != nil {
+		return fmt.Errorf("rebuild full-text column: %w", err)
+	} else if n > 0 {
+		log.Info("rebuilt full-text column for logs written by an older version", "rows", n)
 	}
 
 	srv := api.New(st, log, indexes)

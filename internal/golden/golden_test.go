@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
@@ -110,6 +111,10 @@ func TestGolden(t *testing.T) {
 				got := Normalize(raw, names)
 				dump.Results = append(dump.Results, RecordedCase{Name: c.Name, Response: got})
 				reason, isKnown := known[key]
+				if strings.HasPrefix(reason, "不稳定") {
+					// 结果本身不确定（并列行的顺序等）：一致与否都不作判断
+					t.Skipf("unstable: %s", reason)
+				}
 				if Equal(*want, got) {
 					pass++
 					if isKnown && !*updateKnown {

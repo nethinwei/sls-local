@@ -31,6 +31,8 @@ testdata/golden/
 go test ./internal/golden -run TestGolden -golden.update-known
 ```
 
+原因以「不稳定」开头的条目（结果本身不确定，例如并列行的顺序）一致与否都不作判断。
+
 已有条目的原因说明会保留，新增条目的原因为空，需要补上。
 
 ## 录制

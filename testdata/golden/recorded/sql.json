@@ -14,7 +14,7 @@
           "meta": {
             "count": 1,
             "progress": "Complete",
-            "processedRows": 2527,
+            "processedRows": 2529,
             "hasSQL": true,
             "telementryType": "logging",
             "telemetryType": "logging",
@@ -38,7 +38,7 @@
           },
           "data": [
             {
-              "c": "2527",
+              "c": "2529",
               "__source__": "",
               "__time__": "1793842027"
             }
@@ -592,7 +592,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select level, count(*) as c group by level having count(*) > 50 order by level",
+            "aggQuery": " select level, count(*) as c group by level having count(*) \u003e 50 order by level",
             "insertedSQL": "1,29, from \"{logstore}\" ",
             "keys": [
               "level",
@@ -650,7 +650,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select count(*) as c where latency_ms > 300",
+            "aggQuery": " select count(*) as c where latency_ms \u003e 300",
             "insertedSQL": "1,22, from \"{logstore}\" ",
             "keys": [
               "c"
@@ -786,7 +786,7 @@
             "hasSQL": true,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "service: checkout and latency_ms > 100",
+            "whereQuery": "service: checkout and latency_ms \u003e 100",
             "aggQuery": " select count(*) as c",
             "insertedSQL": "1,21, from \"{logstore}\" ",
             "keys": [
@@ -1044,7 +1044,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select msg, latency_ms where latency_ms > 1000 order by latency_ms desc, msg limit 3",
+            "aggQuery": " select msg, latency_ms where latency_ms \u003e 1000 order by latency_ms desc, msg limit 3",
             "insertedSQL": "1,24, from \"{logstore}\" ",
             "keys": [
               "msg",
@@ -1370,7 +1370,7 @@
               "__time__": "1793842027"
             },
             {
-              "msg": "say \"hello\" to <world> & friends",
+              "msg": "say \"hello\" to \u003cworld\u003e \u0026 friends",
               "__source__": "",
               "__time__": "1793842027"
             },
@@ -1695,7 +1695,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "ErrorType:SyntaxError.ErrorPosition,line:1,column:74.ErrorMessage:line 1:74: mismatched input 'offset' expecting <EOF>"
+          "errorMessage": "ErrorType:SyntaxError.ErrorPosition,line:1,column:74.ErrorMessage:line 1:74: mismatched input 'offset' expecting \u003cEOF\u003e"
         }
       }
     },
@@ -2132,7 +2132,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select level, c from (select level, count(*) as c from log group by level) where c > 10 order by level",
+            "aggQuery": " select level, c from (select level, count(*) as c from log group by level) where c \u003e 10 order by level",
             "keys": [
               "level",
               "c"
@@ -2353,12 +2353,12 @@
           },
           "data": [
             {
-              "level": "ERROR",
+              "level": "WARN",
               "__source__": "",
               "__time__": "1793842027"
             },
             {
-              "level": "ERROR",
+              "level": "WARN",
               "__source__": "",
               "__time__": "1793842027"
             }
@@ -2701,7 +2701,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select count(*) filter (where latency_ms > 300) as f",
+            "aggQuery": " select count(*) filter (where latency_ms \u003e 300) as f",
             "insertedSQL": "1,53, from \"{logstore}\" ",
             "keys": [
               "f"
@@ -2787,7 +2787,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select case when latency_ms > 300 then 'slow' when latency_ms > 100 then 'mid' else 'fast' end as k, count(*) as c where latency_ms is not null group by k order by k",
+            "aggQuery": " select case when latency_ms \u003e 300 then 'slow' when latency_ms \u003e 100 then 'mid' else 'fast' end as k, count(*) as c where latency_ms is not null group by k order by k",
             "insertedSQL": "1,116, from \"{logstore}\" ",
             "keys": [
               "k",
@@ -2845,7 +2845,7 @@
             "telementryType": "logging",
             "telemetryType": "logging",
             "whereQuery": "* ",
-            "aggQuery": " select if(latency_ms > 300, 'slow', 'fast') as k, count(*) as c group by k order by k",
+            "aggQuery": " select if(latency_ms \u003e 300, 'slow', 'fast') as k, count(*) as c group by k order by k",
             "insertedSQL": "1,65, from \"{logstore}\" ",
             "keys": [
               "k",
@@ -3033,7 +3033,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "ErrorType:SyntaxError.ErrorPosition,line:1,column:40.ErrorMessage:line 1:62: '>' cannot be applied to bigint, varchar(3)"
+          "errorMessage": "ErrorType:SyntaxError.ErrorPosition,line:1,column:40.ErrorMessage:line 1:62: '\u003e' cannot be applied to bigint, varchar(3)"
         }
       }
     },
@@ -3793,6 +3793,19 @@
               "__time__": "1793842027"
             }
           ]
+        }
+      }
+    },
+    {
+      "name": "select-ns-part",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "line 1:9: Column '__time_ns_part__' cannot be resolved; please add the column in the index attribute"
         }
       }
     }

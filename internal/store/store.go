@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -40,7 +41,9 @@ CREATE TABLE IF NOT EXISTS logs (
 ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_ctx VARCHAR;
 -- __pack_meta__ 的后两段：日志所在包（LogGroup）的条数与它在包里的序号
 ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_n INTEGER;
-ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_i INTEGER;`
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_i INTEGER;
+-- 数据格式的版本等元信息
+CREATE TABLE IF NOT EXISTS sls_meta (key VARCHAR PRIMARY KEY, value VARCHAR);`
 
 // KV 是一个字段或 tag。
 type KV struct{ Key, Value string }
@@ -128,6 +131,69 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// fulltextVersion 是全文列的生成规则版本：2 起包含 __source__ 与字段名、不含数值字段的值（v0.2.0）。
+const fulltextVersion = "2"
+
+// RebuildFulltext 把旧版本写入的全文列按当前规则重建（升级后第一次启动时执行一次）。numeric 返回
+// logstore 里按 long/double 建了索引的字段。返回重建的行数；已经是当前版本时为 0。
+func (s *Store) RebuildFulltext(ctx context.Context, numeric func(project, logstore string) map[string]bool) (int64, error) {
+	var v sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM sls_meta WHERE key = 'fulltext_version'`).Scan(&v)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	if v.String == fulltextVersion {
+		return 0, nil
+	}
+	s.mu.Lock() // 重建期间不接受写入
+	defer s.mu.Unlock()
+	if _, err := s.db.ExecContext(ctx, `CREATE OR REPLACE TABLE sls_fulltext_rebuild (seq BIGINT, fulltext VARCHAR)`); err != nil {
+		return 0, err
+	}
+	defer s.db.ExecContext(context.Background(), `DROP TABLE IF EXISTS sls_fulltext_rebuild`)
+	app, err := duckdb.NewAppenderFromConn(s.con, "", "sls_fulltext_rebuild")
+	if err != nil {
+		return 0, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT project, logstore, seq, source, contents FROM logs`)
+	if err != nil {
+		app.Close()
+		return 0, err
+	}
+	var n int64
+	cache := map[string]map[string]bool{}
+	for rows.Next() {
+		var project, logstore, source, contents string
+		var seq int64
+		if err := rows.Scan(&project, &logstore, &seq, &source, &contents); err != nil {
+			rows.Close()
+			app.Close()
+			return 0, err
+		}
+		key := project + "/" + logstore
+		num, ok := cache[key]
+		if !ok {
+			num = numeric(project, logstore)
+			cache[key] = num
+		}
+		if err := app.AppendRow(seq, fulltext(source, orderedObject(contents), num)); err != nil {
+			rows.Close()
+			app.Close()
+			return 0, err
+		}
+		n++
+	}
+	rows.Close()
+	if err := app.Close(); err != nil {
+		return 0, err
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE logs SET fulltext = r.fulltext FROM sls_fulltext_rebuild r WHERE logs.seq = r.seq`); err != nil {
+		return 0, err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO sls_meta VALUES ('fulltext_version', ?)`, fulltextVersion)
+	return n, err
 }
 
 // Close 刷出未写完的数据并关闭数据库。
@@ -218,17 +284,26 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 	}
 	tagsJSON := objectJSON(tags)
 
+	// 编码在锁外做，锁内只剩 Appender 写入
+	type encoded struct {
+		ns                 any
+		contents, fulltext string
+	}
+	enc := make([]encoded, len(g.Logs))
+	for i, l := range g.Logs {
+		if l.TimeNs != nil {
+			enc[i].ns = int32(*l.TimeNs)
+		}
+		enc[i].contents = objectJSON(dedupe(l.Contents))
+		enc[i].fulltext = fulltext(g.Source, l.Contents, g.NumericKeys)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, l := range g.Logs {
 		s.seq++
-		var ns any
-		if l.TimeNs != nil {
-			ns = int32(*l.TimeNs)
-		}
-		if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), ns, g.Topic, g.Source,
-			tagsJSON, objectJSON(dedupe(l.Contents)), fulltext(g.Source, l.Contents, g.NumericKeys), packCtx,
-			int32(len(g.Logs)), int32(i)); err != nil {
+		if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), enc[i].ns, g.Topic, g.Source,
+			tagsJSON, enc[i].contents, enc[i].fulltext, packCtx, int32(len(g.Logs)), int32(i)); err != nil {
 			return fmt.Errorf("append: %w", err)
 		}
 	}
@@ -267,9 +342,20 @@ func objectJSON(kvs []KV) string {
 	return b.String()
 }
 
+// writeString 按 encoding/json 的规则把 s 编码成 JSON 字符串。绝大多数值只含不需要转义的 ASCII，
+// 直接写出；其余交给 json.Marshal（它还会转义 <>&、U+2028/2029 并替换非法 UTF-8，输出保持不变）。
 func writeString(b *bytes.Buffer, s string) {
-	enc, _ := json.Marshal(s) // string 编码不会失败
-	b.Write(enc)
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c >= 0x80 || c == '"' || c == '\\' || c == '<' || c == '>' || c == '&' {
+			enc, _ := json.Marshal(s) // string 编码不会失败
+			b.Write(enc)
+			return
+		}
+	}
+	b.Grow(len(s) + 2)
+	b.WriteByte('"')
+	b.WriteString(s)
+	b.WriteByte('"')
 }
 
 // fulltext 是全文检索的文本。实测 SLS 的全文检索也能匹配字段名（搜 currency 命中带这个字段的日志）

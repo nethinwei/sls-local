@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/nethinwei/sls-local/internal/index"
 )
@@ -608,7 +609,12 @@ func (t term) compile(c *compiler) (string, error) {
 		if c.ix.Line == nil {
 			return "", &Error{msgNoLineIndex}
 		}
-		return c.textMatch("fulltext", nil, c.ix.Line, t.value, wildcard), nil
+		// 全文列用换行连接各字段（见 store.fulltext），SLS 按字段分别分词，所以字段边界总是词边界
+		line := *c.ix.Line
+		if !strings.ContainsRune(line.Tokens, '\n') {
+			line.Tokens += "\n"
+		}
+		return c.textMatch("fulltext", nil, &line, t.value, wildcard), nil
 	}
 	f, path, ok, err := c.field(t.key)
 	if err != nil {
@@ -666,9 +672,29 @@ func (c *compiler) textMatch(expr string, exprArgs []any, f *index.Field, value 
 	if !ok {
 		return "FALSE"
 	}
+	match := "coalesce(regexp_matches(" + expr + ", ?), false)"
+	// 直接取列的（全文、__topic__、__source__）先用子串查找排除大部分行，正则只跑剩下的（约快一倍）。
+	// 正则匹配时其中的每个字面片段都必然出现在文本里，所以不会漏。JSON 字段上不加：再取一遍值比正则还贵。
+	if lit := longestLiteral(value, wildcard); len(exprArgs) == 0 && lit != "" {
+		c.args = append(c.args, lit, pattern)
+		return "(contains(" + expr + ", ?) AND " + match + ")"
+	}
 	c.args = append(c.args, exprArgs...)
 	c.args = append(c.args, pattern)
-	return "coalesce(regexp_matches(" + expr + ", ?), false)"
+	return match
+}
+
+// longestLiteral 是检索值里最长的一段不含通配符与分词符的文字（分词符按任意分词符算，偏保守）。
+func longestLiteral(value string, wildcard bool) string {
+	best := ""
+	for _, piece := range strings.FieldsFunc(value, func(r rune) bool {
+		return (wildcard && (r == '*' || r == '?')) || !(unicode.IsLetter(r) || unicode.IsDigit(r))
+	}) {
+		if len(piece) > len(best) {
+			best = piece
+		}
+	}
+	return best
 }
 
 // cmp 是数值比较：key > 值 等。text 字段上的比较匹配不到（与 SLS 一致，不报错）。

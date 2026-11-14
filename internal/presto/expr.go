@@ -512,8 +512,7 @@ func (t *tr) logField(name string) (val, bool) {
 	switch strings.ToLower(name) {
 	case "__time__":
 		return val{ColTime, "bigint"}, true
-	case "__time_ns_part__":
-		return val{"coalesce(" + ColNs + ", 0)", "bigint"}, true
+	// __time_ns_part__ 在 SLS 的 SQL 里不能用（报 Column ... cannot be resolved）
 	case "__topic__":
 		return val{"NULLIF(" + ColTopic + ", '')", "varchar"}, true // SLS 的 SQL 里空 topic 是 null
 	case "__source__":

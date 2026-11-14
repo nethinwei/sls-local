@@ -44,8 +44,21 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 	if rest, ok := strings.CutPrefix(stmt.SQL, "WITH "); ok { // 语句自己的 WITH 合并进来
 		q = with[:len(with)-1] + ", " + rest
 	}
+	// processedRows 与结果互不依赖，另开一个连接同时算
+	processed := make(chan error, 1)
+	res := &SQLResult{}
+	go func() {
+		var err error
+		if stmt.Processed != "" {
+			err = s.db.QueryRowContext(ctx, with+"SELECT "+stmt.Processed, append(cteArgs, stmt.Args...)...).Scan(&res.Processed)
+		} else {
+			err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+base, baseArgs...).Scan(&res.Processed)
+		}
+		processed <- err
+	}()
 	rows, err := s.db.QueryContext(ctx, q, append(cteArgs, stmt.Args...)...)
 	if err != nil {
+		<-processed
 		return nil, sqlError(stmt, err)
 	}
 	defer rows.Close()
@@ -53,7 +66,6 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 	if err != nil {
 		return nil, err
 	}
-	res := &SQLResult{}
 	dbTypes := make([]string, len(cts))
 	for i, ct := range cts {
 		res.Keys = append(res.Keys, ct.Name())
@@ -103,14 +115,10 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 		res.Rows = append(res.Rows, b.Bytes())
 	}
 	if err := rows.Err(); err != nil {
+		<-processed
 		return nil, sqlError(stmt, err)
 	}
-	if stmt.Processed != "" {
-		err = s.db.QueryRowContext(ctx, with+"SELECT "+stmt.Processed, append(cteArgs, stmt.Args...)...).Scan(&res.Processed)
-	} else {
-		err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+base, baseArgs...).Scan(&res.Processed)
-	}
-	if err != nil {
+	if err := <-processed; err != nil {
 		return nil, sqlError(stmt, err)
 	}
 	return res, nil

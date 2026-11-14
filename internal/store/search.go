@@ -29,80 +29,170 @@ type SearchParams struct {
 
 // SearchResult 是检索结果。
 type SearchResult struct {
-	Rows  [][]byte // 每行是按 SLS 字段顺序编码好的 JSON 对象
-	Keys  []string // 返回行的键并集，按出现顺序（不含 __time__、__time_ns_part__、__pack_meta__）
-	Count int64    // 时间范围内命中的总条数（不受 limit/offset 影响）
+	Rows [][]byte // 每行是按 SLS 字段顺序编码好的 JSON 对象
+	Keys []string // 返回行的键并集，按出现顺序（不含 __time__、__time_ns_part__、__pack_meta__）
 }
 
 func (p *SearchParams) where() (string, []any) {
-	where := `project = ? AND logstore = ?
+	// t BETWEEN 与后两行重复，但 OR 条件用不上 DuckDB 按块的 min/max 剪枝，单独的区间条件可以
+	where := `project = ? AND logstore = ? AND t BETWEEN ? AND ?
 		AND (t > ? OR (t = ? AND coalesce(ns, 0) >= ?))
 		AND (t < ? OR (t = ? AND coalesce(ns, 0) < ?))
 		AND ` + p.Where.SQL
-	args := []any{p.Project, p.Logstore, p.From, p.From, p.FromNs, p.To, p.To, p.ToNs}
+	args := []any{p.Project, p.Logstore, p.From, p.To, p.From, p.From, p.FromNs, p.To, p.To, p.ToNs}
 	return where, append(args, p.Where.Args...)
 }
 
 // Search 按条件检索日志。
+//
+// 结果按时间排序取一页，而排序要看完时间范围内的全部命中行。多数检索（尤其是 *）在最近的一小段时间里就能
+// 凑够一页，所以按时间切成互不重叠的窗口，从排在前面的一端逐个查，凑够就停（SLS 也会提前停止扫描）。
+// 窗口之间按 t 有序，各窗口的结果依次拼接就是整体排序的结果；命中很少时每行也只扫一次。
 func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, error) {
 	where, args := p.where()
 	order := "ASC"
 	if p.Reverse {
 		order = "DESC"
 	}
-	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i FROM logs WHERE `+where, p.Stages)
+	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i FROM logs WHERE `+where+
+		` AND t BETWEEN ? AND ?`, p.Stages)
 	extCols := ""
 	for _, c := range ext {
 		extCols += ", " + c
 	}
-	q := fmt.Sprintf(`SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0)%s, count(*) OVER () AS total
+	q := fmt.Sprintf(`SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0)%s
 		FROM (%s) ORDER BY t %s, coalesce(ns, 0) %s, seq %s LIMIT ? OFFSET ?`, extCols, src, order, order, order)
+	count := `SELECT count(*) FROM (` + src + `)`
+
 	assemble := needsAssembly(p.Stages)
 	var splRows []splRow
-	rows, err := s.db.QueryContext(ctx, q, append(args, p.Limit, p.Offset)...)
-	if err != nil {
-		return nil, queryError(err)
-	}
-	defer rows.Close()
 	res := &SearchResult{}
 	keys := newKeySet()
-	for rows.Next() {
-		var r row
-		extVals := make([]any, len(ext))
-		dest := []any{&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &r.packN, &r.packI}
-		for i := range extVals {
-			dest = append(dest, &extVals[i])
+	limit, offset := p.Limit, p.Offset
+	// scan 取窗口 [lo, hi] 里的一页，返回取到的行数
+	scan := func(lo, hi, limit, offset int64) (int64, error) {
+		rows, err := s.db.QueryContext(ctx, q, append(args, lo, hi, limit, offset)...)
+		if err != nil {
+			return 0, queryError(err)
 		}
-		if err := rows.Scan(append(dest, &res.Count)...); err != nil {
+		defer rows.Close()
+		var n int64
+		for rows.Next() {
+			n++
+			var r row
+			extVals := make([]any, len(ext))
+			dest := []any{&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &r.packN, &r.packI}
+			for i := range extVals {
+				dest = append(dest, &extVals[i])
+			}
+			if err := rows.Scan(dest...); err != nil {
+				return 0, err
+			}
+			if assemble {
+				rr := r
+				splRows = append(splRows, (&rr).assemble(p.Stages, extVals, p.PackMeta))
+				continue
+			}
+			res.Rows = append(res.Rows, r.encode(searchLayout, p.PackMeta, 0))
+			keys.addObject(r.contents)
+			if p.PackMeta {
+				keys.add("__pack_meta__")
+			}
+			keys.add("__topic__", "__source__")
+			keys.addObject(r.tags)
+		}
+		if err := rows.Err(); err != nil {
+			return 0, queryError(err)
+		}
+		return n, nil
+	}
+
+	var w timeWindows
+	w.init(p.From, p.To, p.Reverse)
+	for limit > 0 {
+		lo, hi, ok := w.next()
+		if !ok {
+			break
+		}
+		if offset > 0 { // 整个窗口都在 offset 之内就只数一下，不取行
+			var n int64
+			if err := s.db.QueryRowContext(ctx, count, append(args, lo, hi)...).Scan(&n); err != nil {
+				return nil, queryError(err)
+			}
+			if n <= offset {
+				offset -= n
+				w.found(n, offset+limit)
+				continue
+			}
+		}
+		n, err := scan(lo, hi, limit, offset)
+		if err != nil {
 			return nil, err
 		}
-		if assemble {
-			rr := r
-			splRows = append(splRows, (&rr).assemble(p.Stages, extVals, p.PackMeta))
-			continue
-		}
-		res.Rows = append(res.Rows, r.encode(searchLayout, p.PackMeta, 0))
-		keys.addObject(r.contents)
-		if p.PackMeta {
-			keys.add("__pack_meta__")
-		}
-		keys.add("__topic__", "__source__")
-		keys.addObject(r.tags)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, queryError(err)
+		w.found(n+offset, limit-n) // 这个窗口命中了 offset 跳过的与取到的
+		limit -= n
+		offset = 0
 	}
 	res.Keys = keys.list
 	if assemble {
 		res.Rows, res.Keys = assembleRows(splRows)
 	}
-	// 没有返回行时（offset 越界）窗口函数拿不到总数，单独数一次
-	if len(res.Rows) == 0 && p.Offset > 0 {
-		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+where, args...).Scan(&res.Count); err != nil {
-			return nil, queryError(err)
+	return res, nil
+}
+
+// timeWindows 把 [from, to]（秒）从一端起切成互不重叠的窗口。第一个窗口取总跨度的 1/32；之后按已扫部分的
+// 命中密度估算还要多大范围才能凑够（多估 1/4），一直没有命中时剩下的一次查完。
+type timeWindows struct {
+	from, to  int64
+	reverse   bool
+	scanned   int64 // 已扫过的秒数
+	hits      int64 // 已扫部分的命中行数（含 offset 跳过的）
+	cur, size int64
+	started   bool
+}
+
+func (w *timeWindows) init(from, to int64, reverse bool) {
+	*w = timeWindows{from: from, to: to, reverse: reverse}
+	w.size = max((to-from+1)/32, 1)
+}
+
+// found 记录上一个窗口命中 n 行、还差 missing 行，据此定下一个窗口的大小。按密度估算并多留 1/4；
+// 下限是已扫跨度的一半，保证窗口至少按 1.5 倍增长，查询次数是对数级的。
+func (w *timeWindows) found(n, missing int64) {
+	w.hits += n
+	if w.hits == 0 {
+		w.size = w.to - w.from + 1 // 没有命中时无从估算，剩下的一次查完（最坏情况只多一次小窗口查询）
+		return
+	}
+	est := w.scanned * missing / w.hits
+	w.size = max(est+est/4, w.scanned/2, 1)
+}
+
+func (w *timeWindows) next() (lo, hi int64, ok bool) {
+	if !w.started {
+		w.started = true
+		if w.reverse {
+			w.cur = w.to
+		} else {
+			w.cur = w.from
 		}
 	}
-	return res, nil
+	size := max(w.size, 1)
+	if w.reverse {
+		if w.cur < w.from {
+			return 0, 0, false
+		}
+		hi, lo = w.cur, max(w.cur-size+1, w.from)
+		w.cur = lo - 1
+	} else {
+		if w.cur > w.to {
+			return 0, 0, false
+		}
+		lo, hi = w.cur, min(w.cur+size-1, w.to)
+		w.cur = hi + 1
+	}
+	w.scanned += hi - lo + 1
+	return lo, hi, true
 }
 
 // QueryError 是语句执行时 DuckDB 报的错（类型不匹配、函数不存在等），按 ParameterInvalid 返回给客户端。

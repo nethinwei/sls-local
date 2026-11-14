@@ -58,5 +58,6 @@
 {"name": "time-bucket", "op": "logs", "query": "* | select __time__ - __time__ % 60 as t, count(*) as c group by t order by t limit 5"},
 {"name": "timegroup-plugin", "op": "logs", "query": "* | select __time__ - __time__ % 30 as time, level, count(*) as count group by time, level order by time limit 6"},
 {"name": "max-time", "op": "logs", "query": "* | select max(__time__) - min(__time__) as span"},
-{"name": "concat-pipes", "op": "logs", "query": "* | select level || '/' || service as p order by __time__, msg limit 1"}
+{"name": "concat-pipes", "op": "logs", "query": "* | select level || '/' || service as p order by __time__, msg limit 1"},
+{"name": "select-ns-part", "op": "logs", "query": "* | select __time_ns_part__ limit 1"}
 ]

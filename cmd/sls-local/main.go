@@ -42,7 +42,9 @@ func main() {
 		cfgPath   = flag.String("config", "", "配置文件（YAML）：预建 logstore 并声明索引，格式见 internal/config")
 		sqlOffset = flag.Duration("sql-utc-offset", store.DefaultSQLOffset, "SQL 时间函数（from_unixtime、date_format、now）使用的时区偏移，SLS 默认东八区")
 		showVer   = flag.Bool("version", false, "打印版本后退出")
-		stores    logstores
+		reindex   = flag.Bool("reindex", false, "按 -config 里当前的索引配置重建全部日志的全文列后退出（需先停掉正在运行的 sls-local）。"+
+			"与 SLS 一样，修改索引配置只影响之后写入的日志，旧日志要用它重建")
+		stores logstores
 	)
 	flag.Var(&stores, "logstore", "启动时预建的 logstore，格式 project/logstore，可重复（写入时也会自动创建）")
 	flag.Parse()
@@ -52,6 +54,13 @@ func main() {
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	if *reindex {
+		if err := runReindex(log, *dataPath, *cfgPath, *sqlOffset); err != nil {
+			log.Error("reindex failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(log, *httpAddr, *httpsAddr, *dataPath, *cfgPath, *ttl, *sqlOffset, stores); err != nil {
 		log.Error("sls-local exited", "error", err)
 		os.Exit(1)
@@ -67,19 +76,11 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl, s
 		return err
 	}
 	defer st.Close()
-	indexes := map[string]*sls.Index{}
-	if cfgPath != "" {
-		cfg, err := config.Load(cfgPath)
-		if err != nil {
-			return err
-		}
-		for _, l := range cfg.Logstores {
-			stores = append(stores, l.Project+"/"+l.Logstore)
-			if l.Index != nil {
-				indexes[l.Project+"/"+l.Logstore] = l.Index
-			}
-		}
+	indexes, configured, err := loadIndexes(cfgPath)
+	if err != nil {
+		return err
 	}
+	stores = append(stores, configured...)
 	for _, s := range stores {
 		project, logstore, ok := strings.Cut(s, "/")
 		if !ok || project == "" || logstore == "" {
@@ -91,13 +92,7 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl, s
 	}
 
 	// 升级后第一次启动：按当前规则重建旧数据的全文列
-	numeric := func(project, logstore string) map[string]bool {
-		if raw, ok := indexes[project+"/"+logstore]; ok {
-			return index.FromConfig(raw).NumericKeys()
-		}
-		return nil
-	}
-	if n, err := st.RebuildFulltext(ctx, numeric); err != nil {
+	if n, err := st.RebuildFulltext(ctx, numericKeys(indexes), false); err != nil {
 		return fmt.Errorf("rebuild full-text column: %w", err)
 	} else if n > 0 {
 		log.Info("rebuilt full-text column for logs written by an older version", "rows", n)
@@ -171,4 +166,56 @@ func retain(ctx context.Context, log *slog.Logger, st *store.Store, ttl time.Dur
 		case <-tick.C:
 		}
 	}
+}
+
+// loadIndexes 读配置文件里的索引声明，返回 project/logstore → 索引，以及配置里的全部 logstore。
+func loadIndexes(cfgPath string) (map[string]*sls.Index, []string, error) {
+	indexes := map[string]*sls.Index{}
+	var stores []string
+	if cfgPath == "" {
+		return indexes, nil, nil
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, l := range cfg.Logstores {
+		stores = append(stores, l.Project+"/"+l.Logstore)
+		if l.Index != nil {
+			indexes[l.Project+"/"+l.Logstore] = l.Index
+		}
+	}
+	return indexes, stores, nil
+}
+
+// numericKeys 返回 logstore 里按 long/double 建了索引的字段：它们的值不进全文列。
+func numericKeys(indexes map[string]*sls.Index) func(project, logstore string) map[string]bool {
+	return func(project, logstore string) map[string]bool {
+		if raw, ok := indexes[project+"/"+logstore]; ok {
+			return index.FromConfig(raw).NumericKeys()
+		}
+		return nil
+	}
+}
+
+// runReindex 按当前索引配置重建全文列。
+func runReindex(log *slog.Logger, dataPath, cfgPath string, sqlOffset time.Duration) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	indexes, _, err := loadIndexes(cfgPath)
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(ctx, dataPath, store.Options{SQLOffset: sqlOffset})
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	start := time.Now()
+	n, err := st.RebuildFulltext(ctx, numericKeys(indexes), true)
+	if err != nil {
+		return err
+	}
+	log.Info("rebuilt full-text column", "rows", n, "elapsed", time.Since(start).String())
+	return nil
 }

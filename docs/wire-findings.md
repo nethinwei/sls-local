@@ -42,6 +42,17 @@
 | `Level: info`、`level:INFO`、`level: INF*` | 命中（字段名不区分大小写；值不区分大小写；词尾通配） |
 | `msg: p*d` | 命中（词中通配） |
 | `msg: "pai*"` | 0 条（引号内 * 是字面量） |
+| `"declined card"`、`msg: "declined card"`、`msg: declined,card`（数据是 card declined） | 命中：引号与分隔符连起来的词只要求各词都出现，不管顺序，可以分在不同字段 |
+| `#"card declined"`、`msg: #"card declined"`、`msg:#"..."`、`#"Card, Declined"` | 命中：短语，按顺序相邻，词之间可隔任意分词符，不区分大小写 |
+| `#"declined card"`；跨字段的 `#"beta gamma"`（f1=alpha beta、f2=gamma）、`#"key value"`（字段名与值） | 0 条：短语不跨字段，字段名与值也算不同部分；值里的换行只是普通分词符（`#"linea lineb"` 命中） |
+| `#"card"`、`#""` | 与普通检索相同（一个词的短语不算短语，meta 没有 phraseQueryInfo） |
+| `not #"..."`、`a not #"..."` | 400 `cannot use phrase query in not expression` |
+| `#"..." \| select ...` | 400 `cannot use phrase query among with sql` |
+| `#"..." \| where ...` | 400 `cannot use spl query together with phrase query`（`\| with_pack_meta` 可以） |
+
+短语查询的 meta（两个词以上的短语，与其他条件组合时也一样）：`terms` 里短语记作引号里的原文（不转小写、保留标点），在 `terms` 之后依次多出 `new_mode: 1`、`mode: 1`（没有返回行时不带，偶尔也带）与 `phraseQueryInfo: {scanAll, beginOffset, endOffset, endTime}`：凑满一页时 `scanAll` 为 false、`processedRows` 是 offset + 行数；没凑满时 `scanAll` 为 true、`processedRows` 是候选行数（把短语放宽成各词都出现时的命中数）。`beginOffset` = max(0, offset − lines)，`endOffset` = offset + 行数，`endTime` 是最后一行的 `__time__`（没有行时为 0）。
+
+同一条日志里字段名重复（写入 `x=a, y_0=taken, x=b, x=c, y=p, y=q, x_0=late`）：返回 `x:a, y_0:taken, x_0:b, x_1:c, y:p, y_0:q, x_0:late`，即同名字段第 n 次出现改名为 `名字_{n-2}`，位置不变，不检查改名后是否重名（响应 JSON 里会有重复的键）；`meta.keys` 是原始字段名去重（不含 `x_1`）；全文检索能匹配到每个值。
 | `level > a`（text 字段比较） | 不报错，0 条 |
 | `cost_ms > 50`、`>=`、`= 68`、`cost_ms: 68`、`in [50 60]`、`in (50 60]`、`elapsed_ms > 1.5` | 命中（long/double） |
 | `cost_ms: abc`、`cost_ms: 6*` | 不报错，0 条 |

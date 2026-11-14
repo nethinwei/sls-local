@@ -2396,6 +2396,3793 @@
       }
     },
     {
+      "name": "fulltext-quoted-reverse",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "\"declined card\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card",
+                "key": ""
+              },
+              {
+                "term": "declined",
+                "key": ""
+              }
+            ],
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "fulltext-hash-phrase",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"card declined\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card declined",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793842110
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "fulltext-hash-phrase-reverse",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 0,
+            "progress": "Complete",
+            "processedRows": 93,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"declined card\"",
+            "aggQuery": "",
+            "terms": [
+              {
+                "term": "declined card",
+                "key": ""
+              }
+            ],
+            "phraseQueryInfo": {
+              "scanAll": true,
+              "beginOffset": 0,
+              "endOffset": 0,
+              "endTime": 0
+            },
+            "isAccurate": true
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "fulltext-hash-phrase-punct",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"Card, Declined\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "Card, Declined",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793842110
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "fulltext-hash-phrase#hist",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json",
+          "x-log-count": "93",
+          "x-log-progress": "Complete"
+        },
+        "body": [
+          {
+            "from": 1793842027,
+            "count": 2,
+            "to": 1793842050,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842050,
+            "count": 1,
+            "to": 1793842080,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842080,
+            "count": 1,
+            "to": 1793842110,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842110,
+            "count": 4,
+            "to": 1793842140,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842140,
+            "count": 3,
+            "to": 1793842170,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842170,
+            "count": 5,
+            "to": 1793842200,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842200,
+            "count": 4,
+            "to": 1793842230,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842230,
+            "count": 2,
+            "to": 1793842260,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842260,
+            "count": 2,
+            "to": 1793842290,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842290,
+            "count": 2,
+            "to": 1793842320,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842320,
+            "count": 2,
+            "to": 1793842350,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842350,
+            "count": 2,
+            "to": 1793842380,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842380,
+            "count": 1,
+            "to": 1793842410,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842410,
+            "count": 2,
+            "to": 1793842440,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842440,
+            "count": 1,
+            "to": 1793842470,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842470,
+            "count": 2,
+            "to": 1793842500,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842500,
+            "count": 0,
+            "to": 1793842530,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842530,
+            "count": 1,
+            "to": 1793842560,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842560,
+            "count": 2,
+            "to": 1793842590,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842590,
+            "count": 4,
+            "to": 1793842620,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842620,
+            "count": 4,
+            "to": 1793842650,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842650,
+            "count": 4,
+            "to": 1793842680,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842680,
+            "count": 5,
+            "to": 1793842710,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842710,
+            "count": 0,
+            "to": 1793842740,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842740,
+            "count": 2,
+            "to": 1793842770,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842770,
+            "count": 3,
+            "to": 1793842800,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842800,
+            "count": 6,
+            "to": 1793842830,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842830,
+            "count": 3,
+            "to": 1793842860,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842860,
+            "count": 3,
+            "to": 1793842890,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842890,
+            "count": 2,
+            "to": 1793842920,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842920,
+            "count": 2,
+            "to": 1793842950,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842950,
+            "count": 1,
+            "to": 1793842980,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793842980,
+            "count": 3,
+            "to": 1793843010,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843010,
+            "count": 1,
+            "to": 1793843040,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843040,
+            "count": 1,
+            "to": 1793843070,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843070,
+            "count": 0,
+            "to": 1793843100,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843100,
+            "count": 3,
+            "to": 1793843130,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843130,
+            "count": 2,
+            "to": 1793843160,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843160,
+            "count": 5,
+            "to": 1793843190,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843190,
+            "count": 0,
+            "to": 1793843220,
+            "progress": "Complete"
+          },
+          {
+            "from": 1793843220,
+            "count": 0,
+            "to": 1793843227,
+            "progress": "Complete"
+          }
+        ]
+      }
+    },
+    {
+      "name": "field-quoted-reverse",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "msg: \"declined card\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card",
+                "key": "msg"
+              },
+              {
+                "term": "declined",
+                "key": "msg"
+              }
+            ],
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "field-hash-phrase",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "msg: #\"card declined\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card declined",
+                "key": "msg"
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793842110
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "field-hash-phrase-nospace",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 0,
+            "progress": "Complete",
+            "processedRows": 93,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "msg:#\"declined card\"",
+            "aggQuery": "",
+            "terms": [
+              {
+                "term": "declined card",
+                "key": "msg"
+              }
+            ],
+            "phraseQueryInfo": {
+              "scanAll": true,
+              "beginOffset": 0,
+              "endOffset": 0,
+              "endTime": 0
+            },
+            "isAccurate": true
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "field-delimited-words",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "msg: declined,card",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card",
+                "key": "msg"
+              },
+              {
+                "term": "declined",
+                "key": "msg"
+              }
+            ],
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-all",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 93,
+            "progress": "Complete",
+            "processedRows": 93,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"card declined\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card declined",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": true,
+              "beginOffset": 0,
+              "endOffset": 93,
+              "endTime": 1793843184
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD67216270",
+              "error": "insufficient funds",
+              "latency_ms": "50",
+              "code": "XYZ-9",
+              "trace_id": "eed00e8ab32c878d0e97693cbad7d414",
+              "span_id": "0d6720733955c21e",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842125",
+              "__time_ns_part__": "341053028"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD52868891",
+              "error": "insufficient funds",
+              "latency_ms": "8",
+              "code": "XYZ-9",
+              "trace_id": "eb08616465458a04d3436377a4e475a9",
+              "span_id": "88001f9ec4274fe0",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842129",
+              "__time_ns_part__": "972536980"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD94205001",
+              "error": "issuer unavailable",
+              "latency_ms": "35",
+              "code": "AbC-12",
+              "trace_id": "4dfd591ba300a83feebd8bf62d922bc4",
+              "span_id": "04327dfa9817a950",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842136",
+              "__time_ns_part__": "576154377"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD69986183",
+              "error": "insufficient funds",
+              "latency_ms": "231",
+              "code": "abc-12",
+              "trace_id": "db9cfbed2d5d57c22f24446f428a0880",
+              "span_id": "94ff466a0e936a6d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842143",
+              "__time_ns_part__": "930357973"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD84863096",
+              "error": "issuer unavailable",
+              "latency_ms": "137",
+              "code": "abc-12",
+              "trace_id": "a3935fd023d7ceed929003a6530746f6",
+              "span_id": "2b4d5ddf847f75e3",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842144",
+              "__time_ns_part__": "29467908"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD27010450",
+              "error": "insufficient funds",
+              "latency_ms": "37",
+              "code": "AbC-12",
+              "trace_id": "6d9fb5a9f117ae3b92aaf3169bc1fdfa",
+              "span_id": "440fbd834f15bb65",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842163",
+              "__time_ns_part__": "434076392"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD60009191",
+              "error": "insufficient funds",
+              "latency_ms": "464",
+              "code": "abc-12",
+              "trace_id": "8f83596900996c5bc2cfaaf9da42e909",
+              "span_id": "f8709a3bd160b5ab",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842172",
+              "__time_ns_part__": "300929078"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD41254169",
+              "error": "card declined",
+              "latency_ms": "115",
+              "code": "AbC-12",
+              "trace_id": "6bb761a64d95ef1b785499314df2c722",
+              "span_id": "eb26a47b87ad8988",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842173",
+              "__time_ns_part__": "774529561"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD22601920",
+              "error": "issuer unavailable",
+              "latency_ms": "46",
+              "code": "abc-12",
+              "trace_id": "80f9e5522d142b9e0dc33f1979a091aa",
+              "span_id": "ae317b1a525052af",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842186",
+              "__time_ns_part__": "13688104"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD53620593",
+              "error": "insufficient funds",
+              "latency_ms": "182",
+              "code": "abc-12",
+              "trace_id": "bd7045878b2cdff9851cf3885b3f4306",
+              "span_id": "f88302d682625ba5",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842188",
+              "__time_ns_part__": "307259012"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD44555844",
+              "error": "card declined",
+              "latency_ms": "40",
+              "code": "XYZ-9",
+              "trace_id": "ab59d1b84f26c83cef52e1b8e6743828",
+              "span_id": "658acec4496baf6f",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842190",
+              "__time_ns_part__": "706503028"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD65756843",
+              "error": "insufficient funds",
+              "latency_ms": "56",
+              "code": "XYZ-9",
+              "trace_id": "91060830aa374b9cdc5130c416e77ee5",
+              "span_id": "e8ab73bebb09cb09",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842202",
+              "__time_ns_part__": "768931666"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD75018705",
+              "error": "issuer unavailable",
+              "latency_ms": "184",
+              "code": "AbC-12",
+              "trace_id": "37a6d6da71f212866c54defbe166298f",
+              "span_id": "b1257b7212967d8e",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-5",
+              "__time__": "1793842205",
+              "__time_ns_part__": "555510439"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD65410108",
+              "error": "card declined",
+              "latency_ms": "112",
+              "code": "AbC-12",
+              "trace_id": "d41fa996f6a998f2a7b537210bde4d39",
+              "span_id": "7cc987dd44c7f1b7",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-6",
+              "__time__": "1793842212",
+              "__time_ns_part__": "143462523"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51761784",
+              "error": "issuer unavailable",
+              "latency_ms": "45",
+              "code": "XYZ-9",
+              "trace_id": "7932c0f3ff71fecd56b6e96f7bc3d599",
+              "span_id": "97baf1702a770060",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-6",
+              "__time__": "1793842218",
+              "__time_ns_part__": "455289153"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD09610215",
+              "error": "card declined",
+              "latency_ms": "155",
+              "code": "XYZ-9",
+              "trace_id": "805adcffeccc9684d24c08b6f7464ee5",
+              "span_id": "fb034c69a00c1505",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-6",
+              "__time__": "1793842251",
+              "__time_ns_part__": "458684746"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD80261860",
+              "error": "insufficient funds",
+              "latency_ms": "163",
+              "code": "abc-12",
+              "trace_id": "13b2656b1780541d5eed1ee0955d0d9f",
+              "span_id": "5cfc3ef93be22c32",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-7",
+              "__time__": "1793842259",
+              "__time_ns_part__": "587916352"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD59074590",
+              "error": "issuer unavailable",
+              "latency_ms": "203",
+              "code": "XYZ-9",
+              "trace_id": "393f5876de23ae73ccc8440ab3408790",
+              "span_id": "06429a94f7fb8499",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-7",
+              "__time__": "1793842269",
+              "__time_ns_part__": "693762156"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD62226264",
+              "error": "insufficient funds",
+              "latency_ms": "29",
+              "code": "AbC-12",
+              "trace_id": "a2fcae17718c5ffc43e27dd15ba3d9eb",
+              "span_id": "1db820c4f263260b",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-7",
+              "__time__": "1793842272",
+              "__time_ns_part__": "30699290"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54823271",
+              "error": "insufficient funds",
+              "latency_ms": "28",
+              "code": "XYZ-9",
+              "trace_id": "d8c3e2756ba8be9ee3ddec35820ad782",
+              "span_id": "ee0c2039e0b0a061",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-8",
+              "__time__": "1793842300",
+              "__time_ns_part__": "21046735"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD60048093",
+              "error": "issuer unavailable",
+              "latency_ms": "25",
+              "code": "XYZ-9",
+              "trace_id": "772e1e9b59950a892720fd624a44d591",
+              "span_id": "1b3f8a4baf12b5e2",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-8",
+              "__time__": "1793842318",
+              "__time_ns_part__": "583428392"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD49424836",
+              "error": "issuer unavailable",
+              "latency_ms": "8",
+              "code": "abc-12",
+              "trace_id": "e2619046b6cd3cba4a7b99db358de8ac",
+              "span_id": "e91614c00019d3a7",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-8",
+              "__time__": "1793842328",
+              "__time_ns_part__": "639502726"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD09766660",
+              "error": "issuer unavailable",
+              "latency_ms": "16",
+              "code": "abc-12",
+              "trace_id": "8a4a9d27341726335e026f25b56c0cfd",
+              "span_id": "f809dea5b4233bea",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-8",
+              "__time__": "1793842329",
+              "__time_ns_part__": "956920302"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD57259515",
+              "error": "card declined",
+              "latency_ms": "537",
+              "code": "AbC-12",
+              "trace_id": "c7b1940742a90f46c3d29ecfddac8f74",
+              "span_id": "c29c07745cfc5204",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-9",
+              "__time__": "1793842361",
+              "__time_ns_part__": "376844946"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51839505",
+              "error": "issuer unavailable",
+              "latency_ms": "162",
+              "code": "abc-12",
+              "trace_id": "2816fea01869e4fbbc1fb3ff393bf03a",
+              "span_id": "19bc1ff26995d5dc",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-9",
+              "__time__": "1793842368",
+              "__time_ns_part__": "991152393"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD97341927",
+              "error": "card declined",
+              "latency_ms": "34",
+              "code": "abc-12",
+              "trace_id": "914d9ca5bf70b4483496fa20c58edb25",
+              "span_id": "0d843fdc0277fb63",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-A",
+              "__time__": "1793842396",
+              "__time_ns_part__": "251596352"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD34408750",
+              "error": "insufficient funds",
+              "latency_ms": "177",
+              "code": "XYZ-9",
+              "trace_id": "a56cda188beb8a2e93490666cc18024c",
+              "span_id": "d7483ac59ba65abd",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-B",
+              "__time__": "1793842414",
+              "__time_ns_part__": "957665450"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD14950800",
+              "error": "insufficient funds",
+              "latency_ms": "96",
+              "code": "AbC-12",
+              "trace_id": "8dc613644381a85d204a0bbc557a448a",
+              "span_id": "96d1915082541526",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-B",
+              "__time__": "1793842415",
+              "__time_ns_part__": "734038800"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD68891941",
+              "error": "insufficient funds",
+              "latency_ms": "16",
+              "code": "XYZ-9",
+              "trace_id": "43463557476bb8623b1185899c7b41ce",
+              "span_id": "58c5281dda12b913",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-C",
+              "__time__": "1793842452",
+              "__time_ns_part__": "950339034"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD58073208",
+              "error": "insufficient funds",
+              "latency_ms": "9",
+              "code": "abc-12",
+              "trace_id": "3363c85e10d96cc88e6b090f294090ab",
+              "span_id": "e9cabb0cb4a8857a",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-C",
+              "__time__": "1793842475",
+              "__time_ns_part__": "235367974"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD33743499",
+              "error": "insufficient funds",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "b13cbb8d4d580cd6d53fa60f294d7284",
+              "span_id": "6bb4e9ef1c9be613",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-C",
+              "__time__": "1793842484",
+              "__time_ns_part__": "815130816"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD47750600",
+              "error": "insufficient funds",
+              "latency_ms": "177",
+              "code": "AbC-12",
+              "trace_id": "cf1ac797d3ad5b66c4483b9361005bb9",
+              "span_id": "bd8e33bb5b1cf46c",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-E",
+              "__time__": "1793842553",
+              "__time_ns_part__": "668450322"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD64432220",
+              "error": "issuer unavailable",
+              "latency_ms": "21",
+              "code": "XYZ-9",
+              "trace_id": "62e910cb2123bd245e3655dd2ac69a9e",
+              "span_id": "11198f68ecc0bebd",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-F",
+              "__time__": "1793842564",
+              "__time_ns_part__": "643279779"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD28279108",
+              "error": "insufficient funds",
+              "latency_ms": "258",
+              "code": "AbC-12",
+              "trace_id": "d70d8730fc40a6cce515caacea7cf941",
+              "span_id": "1997257b971b9f4f",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-F",
+              "__time__": "1793842569",
+              "__time_ns_part__": "304272632"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD12320400",
+              "error": "insufficient funds",
+              "latency_ms": "189",
+              "code": "abc-12",
+              "trace_id": "7bccb2af17f3faf440abda04b84a3c86",
+              "span_id": "0d82a0523b76caa3",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-10",
+              "__time__": "1793842601",
+              "__time_ns_part__": "490320519"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD66298114",
+              "error": "insufficient funds",
+              "latency_ms": "109",
+              "code": "XYZ-9",
+              "trace_id": "43100625d02da1a1d29e77ab84e1edfb",
+              "span_id": "d1898b5921348691",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-10",
+              "__time__": "1793842609",
+              "__time_ns_part__": "266721613"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD35025934",
+              "error": "insufficient funds",
+              "latency_ms": "112",
+              "code": "XYZ-9",
+              "trace_id": "3460a70bb1b0a7450cc735842238ace3",
+              "span_id": "97b6faab8c33862f",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-10",
+              "__time__": "1793842611",
+              "__time_ns_part__": "313465151"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD28497165",
+              "error": "issuer unavailable",
+              "latency_ms": "206",
+              "code": "XYZ-9",
+              "trace_id": "84583d945d4845551c5e88769d97846e",
+              "span_id": "398f4fe1f8d7927c",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-10",
+              "__time__": "1793842618",
+              "__time_ns_part__": "437722422"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD25809722",
+              "error": "card declined",
+              "latency_ms": "100",
+              "code": "XYZ-9",
+              "trace_id": "1449bf44546b07e97b04465b021ee3ec",
+              "span_id": "fd6779856ca0c4ba",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-11",
+              "__time__": "1793842625",
+              "__time_ns_part__": "206512093"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD15720165",
+              "error": "issuer unavailable",
+              "latency_ms": "30",
+              "code": "AbC-12",
+              "trace_id": "9b1c2e46765a53ea766101ddc925f7b7",
+              "span_id": "06c410dda5832065",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-11",
+              "__time__": "1793842631",
+              "__time_ns_part__": "822317711"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD59573882",
+              "error": "card declined",
+              "latency_ms": "72",
+              "code": "AbC-12",
+              "trace_id": "741785f8db469f7e21ca41df9f5f681d",
+              "span_id": "57b9349f54e113e4",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-11",
+              "__time__": "1793842639",
+              "__time_ns_part__": "565775850"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD47135619",
+              "error": "insufficient funds",
+              "latency_ms": "42",
+              "code": "XYZ-9",
+              "trace_id": "25d63f406620bd92b0b1c12c81928d76",
+              "span_id": "a17ecc72cd7ee02a",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-11",
+              "__time__": "1793842648",
+              "__time_ns_part__": "450946125"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD98162427",
+              "error": "issuer unavailable",
+              "latency_ms": "138",
+              "code": "abc-12",
+              "trace_id": "aa3d6201be3ae581b66df4e21a327b72",
+              "span_id": "e8ea1000df622d12",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-11",
+              "__time__": "1793842651",
+              "__time_ns_part__": "485315943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54684188",
+              "error": "insufficient funds",
+              "latency_ms": "64",
+              "code": "abc-12",
+              "trace_id": "c036bd28d9b4c7ffd2fa4d99dfb7a5ca",
+              "span_id": "54d04d2ac7eaa28d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-11",
+              "__time__": "1793842660",
+              "__time_ns_part__": "0"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD39025493",
+              "error": "insufficient funds",
+              "latency_ms": "64",
+              "code": "AbC-12",
+              "trace_id": "6f992fa2565031958422184c7cdf24ae",
+              "span_id": "ee9b396f204e5330",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-12",
+              "__time__": "1793842667",
+              "__time_ns_part__": "75439436"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD68837908",
+              "error": "card declined",
+              "latency_ms": "17",
+              "code": "XYZ-9",
+              "trace_id": "d16afbcc719b83ec55e7b8ea9db844c3",
+              "span_id": "fe5d4fa576bf9f32",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-12",
+              "__time__": "1793842668",
+              "__time_ns_part__": "712473321"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD76444221",
+              "error": "issuer unavailable",
+              "latency_ms": "152",
+              "code": "XYZ-9",
+              "trace_id": "4a4b5d09ca63d4c2ea53b62749fb4da4",
+              "span_id": "1caede0048c80b14",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-12",
+              "__time__": "1793842682",
+              "__time_ns_part__": "349869727"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD22162184",
+              "error": "insufficient funds",
+              "latency_ms": "54",
+              "code": "abc-12",
+              "trace_id": "b8027029f8a3401aca0bc48e32908715",
+              "span_id": "8b5f103014dcf14d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-12",
+              "__time__": "1793842690",
+              "__time_ns_part__": "186568326"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD32046448",
+              "error": "card declined",
+              "latency_ms": "74",
+              "code": "XYZ-9",
+              "trace_id": "eb5ff9ac9aab2609847aae43ab8b8313",
+              "span_id": "019ced7d3606cb20",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-12",
+              "__time__": "1793842692",
+              "__time_ns_part__": "217270544"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD11560623",
+              "error": "issuer unavailable",
+              "latency_ms": "250",
+              "code": "abc-12",
+              "trace_id": "d76a00221498def2120b458e062f373b",
+              "span_id": "428fdef9d0f39dac",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-12",
+              "__time__": "1793842693",
+              "__time_ns_part__": "598738518"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD38886331",
+              "error": "insufficient funds",
+              "latency_ms": "68",
+              "code": "XYZ-9",
+              "trace_id": "33a860ea5aaaa8c39ac6444b3cc0fd36",
+              "span_id": "54ff18374d031d03",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-13",
+              "__time__": "1793842703",
+              "__time_ns_part__": "147933562"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86434606",
+              "error": "issuer unavailable",
+              "latency_ms": "5",
+              "code": "XYZ-9",
+              "trace_id": "aaeee90963918d4b31fd17a51fcaa1dd",
+              "span_id": "7e9528141ed9a574",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-14",
+              "__time__": "1793842752",
+              "__time_ns_part__": "459676672"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD10678660",
+              "error": "issuer unavailable",
+              "latency_ms": "330",
+              "code": "abc-12",
+              "trace_id": "0219857a04c29969477e14a00a41c9f5",
+              "span_id": "743059f7e34536b0",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-14",
+              "__time__": "1793842759",
+              "__time_ns_part__": "443083330"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD46105480",
+              "error": "insufficient funds",
+              "latency_ms": "49",
+              "code": "AbC-12",
+              "trace_id": "cb91daf42598c888e44a3865ed4e50ca",
+              "span_id": "2e4e14c501150d50",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-14",
+              "__time__": "1793842785",
+              "__time_ns_part__": "232969456"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54652629",
+              "error": "issuer unavailable",
+              "latency_ms": "5",
+              "code": "abc-12",
+              "trace_id": "8e3f01aea68dc9e5aba26180ef8626f4",
+              "span_id": "da31f7e9185a591a",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-15",
+              "__time__": "1793842786",
+              "__time_ns_part__": "951544857"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD15903103",
+              "error": "card declined",
+              "latency_ms": "106",
+              "code": "abc-12",
+              "trace_id": "ada230d1d0996dee15f530930c7c13c8",
+              "span_id": "989923181fe2d717",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-15",
+              "__time__": "1793842791",
+              "__time_ns_part__": "218763782"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD64444411",
+              "error": "insufficient funds",
+              "latency_ms": "160",
+              "code": "abc-12",
+              "trace_id": "156e973641b6d31bbdbde623d138eb41",
+              "span_id": "bd071ad34bf79586",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-15",
+              "__time__": "1793842801",
+              "__time_ns_part__": "43402195"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD04373985",
+              "error": "issuer unavailable",
+              "latency_ms": "353",
+              "code": "XYZ-9",
+              "trace_id": "7e4e4795155d385a043e8e9165c48428",
+              "span_id": "00cf93ceddf816ba",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-15",
+              "__time__": "1793842805",
+              "__time_ns_part__": "275219000"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD32960874",
+              "error": "insufficient funds",
+              "latency_ms": "22",
+              "code": "AbC-12",
+              "trace_id": "81d0278b408443d601c0e97ca49c744f",
+              "span_id": "f72761e0bc4704f7",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-15",
+              "__time__": "1793842811",
+              "__time_ns_part__": "798002217"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD94676300",
+              "error": "card declined",
+              "latency_ms": "417",
+              "code": "AbC-12",
+              "trace_id": "b69f91b126b179fdc780804a03703716",
+              "span_id": "a221d0760c99c05a",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-16",
+              "__time__": "1793842815",
+              "__time_ns_part__": "551345871"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD79582764",
+              "error": "insufficient funds",
+              "latency_ms": "147",
+              "code": "XYZ-9",
+              "trace_id": "5c0645bc8043b9159e1a68de77c7f847",
+              "span_id": "571c8c6e713da49d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-16",
+              "__time__": "1793842819",
+              "__time_ns_part__": "796588306"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD57607561",
+              "error": "card declined",
+              "latency_ms": "284",
+              "code": "abc-12",
+              "trace_id": "c71caddd2a8b40b23e413d8e7aa6d2a0",
+              "span_id": "73ba002c2ceea82e",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-16",
+              "__time__": "1793842821",
+              "__time_ns_part__": "761406427"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD73725597",
+              "error": "card declined",
+              "latency_ms": "219",
+              "code": "abc-12",
+              "trace_id": "bdef0af27ab91711e33f4b23523a8bc6",
+              "span_id": "b42fae538de0028a",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-16",
+              "__time__": "1793842833",
+              "__time_ns_part__": "211789871"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD33258841",
+              "error": "issuer unavailable",
+              "latency_ms": "5",
+              "code": "XYZ-9",
+              "trace_id": "0288909cadb11765bbb6bba4e76dd7ac",
+              "span_id": "87e953bc3028b1f6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-16",
+              "__time__": "1793842837",
+              "__time_ns_part__": "442947110"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD42952853",
+              "error": "issuer unavailable",
+              "latency_ms": "18",
+              "code": "abc-12",
+              "trace_id": "f0f9bc9e151f596f8fd8fb5f838f493c",
+              "span_id": "fc053832ded9a5f0",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-16",
+              "__time__": "1793842846",
+              "__time_ns_part__": "410950433"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD30347053",
+              "error": "insufficient funds",
+              "latency_ms": "74",
+              "code": "XYZ-9",
+              "trace_id": "bbf48602f64e1ed102fd5e1bad856c32",
+              "span_id": "557c1b01069bfca4",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-17",
+              "__time__": "1793842871",
+              "__time_ns_part__": "0"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD30020290",
+              "error": "card declined",
+              "latency_ms": "93",
+              "code": "AbC-12",
+              "trace_id": "8dc6f825f0cd1281a1917af0b98d3d39",
+              "span_id": "3abadc07f8412ac8",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-17",
+              "__time__": "1793842877",
+              "__time_ns_part__": "385238477"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54794367",
+              "error": "issuer unavailable",
+              "latency_ms": "2",
+              "code": "abc-12",
+              "trace_id": "28ca8560f909ceaf9d855ed2c3fde70c",
+              "span_id": "a822b9ff4e8d77bf",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-17",
+              "__time__": "1793842882",
+              "__time_ns_part__": "899872543"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD27340298",
+              "error": "issuer unavailable",
+              "latency_ms": "104",
+              "code": "XYZ-9",
+              "trace_id": "82a0fecef55712a739f300fd62cb2cd5",
+              "span_id": "ab91e9590cbc4675",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-18",
+              "__time__": "1793842892",
+              "__time_ns_part__": "738957151"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD03312186",
+              "error": "card declined",
+              "latency_ms": "28",
+              "code": "XYZ-9",
+              "trace_id": "20224db7e200bf5ac8f7c1b34c8d5481",
+              "span_id": "b84862547ea69bca",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-18",
+              "__time__": "1793842910",
+              "__time_ns_part__": "908556922"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD99754030",
+              "error": "insufficient funds",
+              "latency_ms": "27",
+              "code": "XYZ-9",
+              "trace_id": "ba4dd9a6b62954144a70805e200ac1a7",
+              "span_id": "cabb698d8d129bc8",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-19",
+              "__time__": "1793842931",
+              "__time_ns_part__": "210849074"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD38419037",
+              "error": "card declined",
+              "latency_ms": "102",
+              "code": "XYZ-9",
+              "trace_id": "c86ed8af87736459838f049f0dab7430",
+              "span_id": "e5cf1e6145e5eed3",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-19",
+              "__time__": "1793842948",
+              "__time_ns_part__": "220537623"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD95067596",
+              "error": "card declined",
+              "latency_ms": "33",
+              "code": "AbC-12",
+              "trace_id": "147ef4e764702ee3935aed4a9267960a",
+              "span_id": "a9b325e94ea22bda",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-19",
+              "__time__": "1793842956",
+              "__time_ns_part__": "755828407"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD07690344",
+              "error": "issuer unavailable",
+              "latency_ms": "188",
+              "code": "AbC-12",
+              "trace_id": "f4fbb03f910775dc55c438bf1188a013",
+              "span_id": "4bb99fb79e10fb9d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1A",
+              "__time__": "1793842980",
+              "__time_ns_part__": "920562847"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD30456171",
+              "error": "insufficient funds",
+              "latency_ms": "12",
+              "code": "AbC-12",
+              "trace_id": "d4113f829bdadcc4e698e0fa6ae719ae",
+              "span_id": "75bb11f72bf83b31",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1A",
+              "__time__": "1793842995",
+              "__time_ns_part__": "580126733"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD76615767",
+              "error": "issuer unavailable",
+              "latency_ms": "34",
+              "code": "AbC-12",
+              "trace_id": "fe36e46e9fdb09af4485f6ef3ce2ee7a",
+              "span_id": "f743d7cd81a52cdf",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1B",
+              "__time__": "1793843003",
+              "__time_ns_part__": "881764377"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54702692",
+              "error": "card declined",
+              "latency_ms": "22",
+              "code": "AbC-12",
+              "trace_id": "e379d684712275a4653cf3af5f1086cb",
+              "span_id": "f9e10745cd66b22e",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1B",
+              "__time__": "1793843017",
+              "__time_ns_part__": "746742147"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD45278809",
+              "error": "issuer unavailable",
+              "latency_ms": "289",
+              "code": "XYZ-9",
+              "trace_id": "cb1e54c324cc26b0a281c14a324bd7f3",
+              "span_id": "c8ae9816232b1ac5",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1C",
+              "__time__": "1793843057",
+              "__time_ns_part__": "842651379"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD53384039",
+              "error": "issuer unavailable",
+              "latency_ms": "60",
+              "code": "abc-12",
+              "trace_id": "1f3f44fe643f226f98f0a8917a8441be",
+              "span_id": "e594286e5d8f41d2",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1E",
+              "__time__": "1793843106",
+              "__time_ns_part__": "239143386"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD82270972",
+              "error": "insufficient funds",
+              "latency_ms": "19",
+              "code": "abc-12",
+              "trace_id": "a269063466618cc131a1aa53b50001d9",
+              "span_id": "dc178fdcd1a21f40",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1E",
+              "__time__": "1793843111",
+              "__time_ns_part__": "642906401"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD55774201",
+              "error": "insufficient funds",
+              "latency_ms": "126",
+              "code": "XYZ-9",
+              "trace_id": "599acc637db37a5280df3c896bf09e93",
+              "span_id": "4ac6e669b75ff8d7",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1E",
+              "__time__": "1793843118",
+              "__time_ns_part__": "456476377"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD83884218",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "XYZ-9",
+              "trace_id": "a5121c1c9a3df64918cdc0fde0a79c35",
+              "span_id": "365a1a89f7b9fbad",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1E",
+              "__time__": "1793843133",
+              "__time_ns_part__": "982431694"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD39557928",
+              "error": "issuer unavailable",
+              "latency_ms": "79",
+              "code": "abc-12",
+              "trace_id": "6174375a1d9be3c1a547e31a64dd2841",
+              "span_id": "539741082af45dc7",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843149",
+              "__time_ns_part__": "509594956"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD19825066",
+              "error": "card declined",
+              "latency_ms": "175",
+              "code": "abc-12",
+              "trace_id": "5d15503b970883526e95f8941534f3f2",
+              "span_id": "629040e74c5100d1",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843168",
+              "__time_ns_part__": "159517863"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD10289035",
+              "error": "card declined",
+              "latency_ms": "119",
+              "code": "XYZ-9",
+              "trace_id": "6ef7f33e7d724131f17d18dfbe0ede82",
+              "span_id": "e03c9a86b093038d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843168",
+              "__time_ns_part__": "185868097"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD00489787",
+              "error": "card declined",
+              "latency_ms": "126",
+              "code": "AbC-12",
+              "trace_id": "40769632d413e400f44501f1a3a54c43",
+              "span_id": "60f881ef3145ce27",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843175",
+              "__time_ns_part__": "209052639"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD26128357",
+              "error": "insufficient funds",
+              "latency_ms": "2",
+              "code": "abc-12",
+              "trace_id": "6d1184d48c3db798837b4257b7ef14c5",
+              "span_id": "65df9e07d0559d07",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843182",
+              "__time_ns_part__": "84386423"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD32346805",
+              "error": "issuer unavailable",
+              "latency_ms": "73",
+              "code": "abc-12",
+              "trace_id": "efde0e9546a079d2c250902e9fe13818",
+              "span_id": "39945c347d91113d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-20",
+              "__time__": "1793843184",
+              "__time_ns_part__": "719385942"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-page2",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 10,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"card declined\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card declined",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 10,
+              "endTime": 1793842144
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD67216270",
+              "error": "insufficient funds",
+              "latency_ms": "50",
+              "code": "XYZ-9",
+              "trace_id": "eed00e8ab32c878d0e97693cbad7d414",
+              "span_id": "0d6720733955c21e",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842125",
+              "__time_ns_part__": "341053028"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD52868891",
+              "error": "insufficient funds",
+              "latency_ms": "8",
+              "code": "XYZ-9",
+              "trace_id": "eb08616465458a04d3436377a4e475a9",
+              "span_id": "88001f9ec4274fe0",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842129",
+              "__time_ns_part__": "972536980"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD94205001",
+              "error": "issuer unavailable",
+              "latency_ms": "35",
+              "code": "AbC-12",
+              "trace_id": "4dfd591ba300a83feebd8bf62d922bc4",
+              "span_id": "04327dfa9817a950",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842136",
+              "__time_ns_part__": "576154377"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD69986183",
+              "error": "insufficient funds",
+              "latency_ms": "231",
+              "code": "abc-12",
+              "trace_id": "db9cfbed2d5d57c22f24446f428a0880",
+              "span_id": "94ff466a0e936a6d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842143",
+              "__time_ns_part__": "930357973"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD84863096",
+              "error": "issuer unavailable",
+              "latency_ms": "137",
+              "code": "abc-12",
+              "trace_id": "a3935fd023d7ceed929003a6530746f6",
+              "span_id": "2b4d5ddf847f75e3",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-4",
+              "__time__": "1793842144",
+              "__time_ns_part__": "29467908"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-reverse",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"card declined\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card declined",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793843168
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD32346805",
+              "error": "issuer unavailable",
+              "latency_ms": "73",
+              "code": "abc-12",
+              "trace_id": "efde0e9546a079d2c250902e9fe13818",
+              "span_id": "39945c347d91113d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-20",
+              "__time__": "1793843184",
+              "__time_ns_part__": "719385942"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD26128357",
+              "error": "insufficient funds",
+              "latency_ms": "2",
+              "code": "abc-12",
+              "trace_id": "6d1184d48c3db798837b4257b7ef14c5",
+              "span_id": "65df9e07d0559d07",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843182",
+              "__time_ns_part__": "84386423"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD00489787",
+              "error": "card declined",
+              "latency_ms": "126",
+              "code": "AbC-12",
+              "trace_id": "40769632d413e400f44501f1a3a54c43",
+              "span_id": "60f881ef3145ce27",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843175",
+              "__time_ns_part__": "209052639"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD10289035",
+              "error": "card declined",
+              "latency_ms": "119",
+              "code": "XYZ-9",
+              "trace_id": "6ef7f33e7d724131f17d18dfbe0ede82",
+              "span_id": "e03c9a86b093038d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843168",
+              "__time_ns_part__": "185868097"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD19825066",
+              "error": "card declined",
+              "latency_ms": "175",
+              "code": "abc-12",
+              "trace_id": "5d15503b970883526e95f8941534f3f2",
+              "span_id": "629040e74c5100d1",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1F",
+              "__time__": "1793843168",
+              "__time_ns_part__": "159517863"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-offset-beyond",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 0,
+            "progress": "Complete",
+            "processedRows": 93,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"card declined\"",
+            "aggQuery": "",
+            "terms": [
+              {
+                "term": "card declined",
+                "key": ""
+              }
+            ],
+            "phraseQueryInfo": {
+              "scanAll": true,
+              "beginOffset": 995,
+              "endOffset": 1000,
+              "endTime": 0
+            },
+            "isAccurate": true
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-or",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"declined card\" or level: error",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__",
+              "sku",
+              "remark",
+              "__tag__:env"
+            ],
+            "terms": [
+              {
+                "term": "error",
+                "key": "level"
+              },
+              {
+                "term": "declined card",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793842059
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "库存不足，无法预占",
+              "service": "inventory",
+              "sku": "SKU-0013",
+              "remark": "华南二号仓暂停发货",
+              "trace_id": "290b46efbc88f4ceb1cecea44cfa2529",
+              "span_id": "252a0f18970c992e",
+              "__topic__": "",
+              "__source__": "10.0.0.12",
+              "__tag__:__hostname__": "host-b",
+              "__tag__:__path__": "/var/log/app/inventory.log",
+              "__tag__:__pack_id__": "5EED00000000B002-1",
+              "__tag__:env": "staging",
+              "__time__": "1793842035",
+              "__time_ns_part__": "21750412"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "库存不足，无法预占",
+              "service": "inventory",
+              "sku": "SKU-1576",
+              "remark": "上海仓盘点中",
+              "trace_id": "be237d3280e28b368190c6ba1137e00d",
+              "span_id": "fbe2f13ef233b2f7",
+              "__topic__": "",
+              "__source__": "10.0.0.12",
+              "__tag__:__hostname__": "host-b",
+              "__tag__:__path__": "/var/log/app/inventory.log",
+              "__tag__:__pack_id__": "5EED00000000B002-1",
+              "__tag__:env": "staging",
+              "__time__": "1793842053",
+              "__time_ns_part__": "970496332"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-and-not-candidates",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 0,
+            "progress": "Complete",
+            "processedRows": 93,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"declined card\" and level: error",
+            "aggQuery": "",
+            "terms": [
+              {
+                "term": "declined card",
+                "key": ""
+              },
+              {
+                "term": "error",
+                "key": "level"
+              }
+            ],
+            "phraseQueryInfo": {
+              "scanAll": true,
+              "beginOffset": 0,
+              "endOffset": 0,
+              "endTime": 0
+            },
+            "isAccurate": true
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-single-word",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"card\"",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card",
+                "key": ""
+              }
+            ],
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-empty",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 0,
+            "progress": "Complete",
+            "processedRows": 0,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "#\"\"",
+            "aggQuery": "",
+            "terms": [
+              {
+                "term": "",
+                "key": ""
+              }
+            ],
+            "isAccurate": true
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-paren-packmeta",
+      "response": {
+        "status": 200,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "meta": {
+            "count": 5,
+            "progress": "Complete",
+            "processedRows": 5,
+            "hasSQL": false,
+            "telementryType": "logging",
+            "telemetryType": "logging",
+            "whereQuery": "(#\"card declined\") | with_pack_meta",
+            "aggQuery": "",
+            "keys": [
+              "level",
+              "msg",
+              "service",
+              "order_id",
+              "error",
+              "latency_ms",
+              "code",
+              "trace_id",
+              "span_id",
+              "__pack_meta__",
+              "__topic__",
+              "__source__",
+              "__tag__:__hostname__",
+              "__tag__:__path__",
+              "__tag__:__pack_id__"
+            ],
+            "terms": [
+              {
+                "term": "card declined",
+                "key": ""
+              }
+            ],
+            "new_mode": 1,
+            "mode": 1,
+            "phraseQueryInfo": {
+              "scanAll": false,
+              "beginOffset": 0,
+              "endOffset": 5,
+              "endTime": 1793842110
+            },
+            "isAccurate": true
+          },
+          "data": [
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD54111792",
+              "error": "insufficient funds",
+              "latency_ms": "78",
+              "code": "XYZ-9",
+              "trace_id": "9fe277ec2c68eda82e5601c746006001",
+              "span_id": "ec8bbb0445996b2d",
+              "__pack_meta__": "0|{cursor}|40|5",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842027",
+              "__time_ns_part__": "872474600"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD43234571",
+              "error": "card declined",
+              "latency_ms": "299",
+              "code": "abc-12",
+              "trace_id": "07a533d74a22fd22c892085dfaf4cc21",
+              "span_id": "a100d8fb3c83afe6",
+              "__pack_meta__": "0|{cursor}|40|22",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842041",
+              "__time_ns_part__": "633626784"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD86158070",
+              "error": "card declined",
+              "latency_ms": "36",
+              "code": "XYZ-9",
+              "trace_id": "0c6d031e7e22f7e3588f67bb3bb41df3",
+              "span_id": "06cdfbd217762712",
+              "__pack_meta__": "0|{cursor}|40|38",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-1",
+              "__time__": "1793842059",
+              "__time_ns_part__": "258215943"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD51334267",
+              "error": "issuer unavailable",
+              "latency_ms": "14",
+              "code": "AbC-12",
+              "trace_id": "c59a5b23251727d80a80878477c76425",
+              "span_id": "405ee1bd69a7f612",
+              "__pack_meta__": "0|{cursor}|40|39",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-2",
+              "__time__": "1793842100",
+              "__time_ns_part__": "464290938"
+            },
+            {
+              "level": "ERROR",
+              "msg": "payment failed: card declined",
+              "service": "checkout",
+              "order_id": "ORD85731650",
+              "error": "insufficient funds",
+              "latency_ms": "6",
+              "code": "abc-12",
+              "trace_id": "5b0db16f469fa58a2b8da8d91316b301",
+              "span_id": "79ff4805548c8642",
+              "__pack_meta__": "0|{cursor}|40|15",
+              "__topic__": "",
+              "__source__": "10.0.0.11",
+              "__tag__:__hostname__": "host-a",
+              "__tag__:__path__": "/var/log/app/checkout.log",
+              "__tag__:__pack_id__": "5EED00000000A001-3",
+              "__time__": "1793842110",
+              "__time_ns_part__": "357571933"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-in-not",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "cannot use phrase query in not expression"
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-binary-not",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "cannot use phrase query in not expression"
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-sql",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "cannot use phrase query among with sql"
+        }
+      }
+    },
+    {
+      "name": "hash-phrase-spl",
+      "response": {
+        "status": 400,
+        "header": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "errorCode": "ParameterInvalid",
+          "errorMessage": "cannot use spl query together with phrase query"
+        }
+      }
+    },
+    {
       "name": "fulltext-implicit-and",
       "response": {
         "status": 200,
@@ -5543,7 +9330,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "\"<world>\"",
+            "whereQuery": "\"\u003cworld\u003e\"",
             "aggQuery": "",
             "keys": [
               "level",
@@ -5567,7 +9354,7 @@
           "data": [
             {
               "level": "INFO",
-              "msg": "say \"hello\" to <world> & friends",
+              "msg": "say \"hello\" to \u003cworld\u003e \u0026 friends",
               "service": "checkout",
               "note": "",
               "__topic__": "",
@@ -14590,7 +18377,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "latency_ms > 300",
+            "whereQuery": "latency_ms \u003e 300",
             "aggQuery": "",
             "keys": [
               "level",
@@ -14979,7 +18766,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "latency_ms >= 100 and latency_ms <= 120",
+            "whereQuery": "latency_ms \u003e= 100 and latency_ms \u003c= 120",
             "aggQuery": "",
             "keys": [
               "level",
@@ -16173,7 +19960,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "latency_ms > 300.5",
+            "whereQuery": "latency_ms \u003e 300.5",
             "aggQuery": "",
             "keys": [
               "level",
@@ -16562,7 +20349,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "latency_ms > 3e2",
+            "whereQuery": "latency_ms \u003e 3e2",
             "aggQuery": "",
             "keys": [
               "level",
@@ -16959,7 +20746,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "latency_ms < 0",
+            "whereQuery": "latency_ms \u003c 0",
             "aggQuery": "",
             "keys": [
               "level",
@@ -17848,7 +21635,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "ratio > 0.9",
+            "whereQuery": "ratio \u003e 0.9",
             "aggQuery": "",
             "keys": [
               "level",
@@ -18560,7 +22347,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "ratio < 0.01",
+            "whereQuery": "ratio \u003c 0.01",
             "aggQuery": "",
             "keys": [
               "level",
@@ -19317,7 +23104,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "http_status >= 500",
+            "whereQuery": "http_status \u003e= 500",
             "aggQuery": "",
             "keys": [
               "level",
@@ -20025,7 +23812,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "user_id > 90000",
+            "whereQuery": "user_id \u003e 90000",
             "aggQuery": "",
             "terms": [
               {
@@ -25391,7 +29178,7 @@
             "hasSQL": false,
             "telementryType": "logging",
             "telemetryType": "logging",
-            "whereQuery": "ctx.user.id > 500",
+            "whereQuery": "ctx.user.id \u003e 500",
             "aggQuery": "",
             "keys": [
               "level",
@@ -28664,7 +32451,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected COLON, expecting $end error position is from column:13 to column:14,error near < : >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected COLON, expecting $end error position is from column:13 to column:14,error near \u003c : \u003e"
         }
       }
     },
@@ -28677,7 +32464,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected COLON, expecting $end error position is from column:13 to column:14,error near < : >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected COLON, expecting $end error position is from column:13 to column:14,error near \u003c : \u003e"
         }
       }
     },
@@ -29123,7 +32910,7 @@
           "data": [
             {
               "level": "INFO",
-              "msg": "say \"hello\" to <world> & friends",
+              "msg": "say \"hello\" to \u003cworld\u003e \u0026 friends",
               "service": "checkout",
               "note": "",
               "__topic__": "",
@@ -29432,7 +33219,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end error position is from column:14 to column:17,error near < and >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end error position is from column:14 to column:17,error near \u003c and \u003e"
         }
       }
     },
@@ -29445,7 +33232,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end error position is from column:14 to column:17,error near < and >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end error position is from column:14 to column:17,error near \u003c and \u003e"
         }
       }
     },
@@ -29458,7 +33245,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end, expecting AND or OR or NOT or RIGHTBRACKET error position is from column:9 to column:14,error near < ERROR >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end, expecting AND or OR or NOT or RIGHTBRACKET error position is from column:9 to column:14,error near \u003c ERROR \u003e"
         }
       }
     },
@@ -29471,7 +33258,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end, expecting AND or OR or NOT or RIGHTBRACKET error position is from column:9 to column:14,error near < ERROR >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected $end, expecting AND or OR or NOT or RIGHTBRACKET error position is from column:9 to column:14,error near \u003c ERROR \u003e"
         }
       }
     },
@@ -29484,7 +33271,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected TERM, expecting $end error position is from column:14 to column:20,error near < failed >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected TERM, expecting $end error position is from column:14 to column:20,error near \u003c failed \u003e"
         }
       }
     },
@@ -29497,7 +33284,7 @@
         },
         "body": {
           "errorCode": "ParameterInvalid",
-          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected TERM, expecting $end error position is from column:14 to column:20,error near < failed >"
+          "errorMessage": "parse search query error,please read query syntax document,error detail:syntax error, unexpected TERM, expecting $end error position is from column:14 to column:20,error near \u003c failed \u003e"
         }
       }
     },

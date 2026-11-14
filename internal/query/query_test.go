@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -145,32 +146,57 @@ func TestSearchTagKeyPath(t *testing.T) {
 	}
 }
 
-// 词匹配语义：按分词符切词、短语连续、通配符只在词内（大小写由 SQL 里的 lower() 处理）。
-func TestTokenPattern(t *testing.T) {
+// 词匹配语义（实测 SLS）：普通值的各词都要出现、不管顺序；短语 #"..." 各词按顺序相邻、不跨字段；
+// 通配符只在词内；全文列里的字段分隔符总是词边界（大小写由 SQL 里的 lower() 处理）。
+func TestTextPatterns(t *testing.T) {
 	tokens := strings.Join(index.DefaultTokens, "")
+	sep := FieldSeparator
 	cases := []struct {
-		value    string
-		wildcard bool
-		text     string
-		want     bool
+		value            string
+		wildcard, phrase bool
+		text             string
+		want             bool
 	}{
-		{"error", true, "call payment failed: error", true},
-		{"err", true, "error", false},
-		{"err*", true, "error happened", true},
-		{"p*d", true, "order paid", true},
-		{"probe 21", false, "probe 21", true},
-		{"probe 21", false, "probe 3 21", false},
-		{"abc21", true, "trace abc21", true},
-		{"abc2", true, "abc21", false},
-		{"a.b", true, "x a.b y", true},
-		{"pai*", false, "paid", false},
+		{"error", true, false, "call payment failed: error", true},
+		{"err", true, false, "error", false},
+		{"err*", true, false, "error happened", true},
+		{"p*d", true, false, "order paid", true},
+		{"abc21", true, false, "trace abc21", true},
+		{"abc2", true, false, "abc21", false},
+		{"a.b", true, false, "x a.b y", true},
+		{"pai*", false, false, "paid", false},
+		// 普通值：各词都出现即可
+		{"probe 21", false, false, "probe 21", true},
+		{"probe 21", false, false, "probe 3 21", true},
+		{"declined card", false, false, "card declined", true},
+		{"declined,card", true, false, "card declined", true},
+		{"alpha zzz", false, false, "alpha beta", false},
+		{"beta gamma", false, false, "alpha beta" + sep + "gamma", true},
+		// 短语：按顺序相邻，词之间可以隔任意分词符，不跨字段
+		{"card declined", false, true, "card declined", true},
+		{"card, declined", false, true, "x card ,  declined y", true},
+		{"declined card", false, true, "card declined", false},
+		{"probe 21", false, true, "probe 3 21", false},
+		{"beta gamma", false, true, "alpha beta" + sep + "gamma", false},
+		{"probekey probeval", false, true, "probekey" + sep + "probeval", false},
+		{"linea lineb", false, true, "linea\nlineb", true},
+		// 字段分隔符是词边界：字段末尾的词能匹配，通配符不跨字段
+		{"timeout", true, false, "upstream timeout" + sep + "level", true},
+		{"time*level", true, false, "timeout" + sep + "level", false},
 	}
 	for _, c := range cases {
-		p, ok := tokenPattern(c.value, tokens, c.wildcard)
-		got := ok && regexp.MustCompile(p).MatchString(c.text)
-		if got != c.want {
-			t.Errorf("tokenPattern(%q) on %q = %v, want %v (pattern %s)", c.value, c.text, got, c.want, p)
+		pats := textPatterns(c.value, tokens, sep, c.wildcard, c.phrase)
+		got := len(pats) > 0
+		for _, p := range pats {
+			got = got && regexp.MustCompile(p.re).MatchString(c.text) && strings.Contains(c.text, p.literal)
 		}
+		if got != c.want {
+			t.Errorf("textPatterns(%q, phrase=%v) on %q = %v, want %v (%+v)", c.value, c.phrase, c.text, got, c.want, pats)
+		}
+	}
+	// 没有分词符时字符类仍是合法的正则
+	for _, p := range textPatterns("a b", "", "", false, false) {
+		regexp.MustCompile(p.re)
 	}
 }
 
@@ -209,5 +235,35 @@ func TestParsePipes(t *testing.T) {
 	p, err = Parse("* | extend a = 1 | where a > 0 | project a", index.Auto())
 	if err != nil || len(p.Stages) != 3 || p.Stages[0].Kind != "extend" || p.Stages[2].Fields[0] != "a" {
 		t.Fatalf("SPL stages: %+v, %v", p, err)
+	}
+}
+
+// 短语 #"..."：几种写法都能解析，meta.terms 记作原文；普通引号的词按字母序拆开（实测 SLS）。
+func TestPhraseSyntax(t *testing.T) {
+	ix := devIndex(t)
+	cases := []struct {
+		in    string
+		terms []Term
+	}{
+		{`#"card declined"`, []Term{{"card declined", ""}}},
+		{`#"Card, Declined"`, []Term{{"Card, Declined", ""}}},
+		{`"declined card"`, []Term{{"card", ""}, {"declined", ""}}},
+		{`msg: #"Card Declined"`, []Term{{"Card Declined", "msg"}}},
+		{`msg:#"card declined"`, []Term{{"card declined", "msg"}}},
+		{`#"card declined" and level: error`, []Term{{"card declined", ""}, {"error", "level"}}},
+		{`#alpha`, []Term{{"#alpha", ""}}}, // # 后面不是引号：普通的词
+	}
+	for _, c := range cases {
+		got, err := Search(c.in, ix)
+		if err != nil {
+			t.Errorf("Search(%q): %v", c.in, err)
+			continue
+		}
+		if !slices.Equal(got.Terms, c.terms) {
+			t.Errorf("Search(%q).Terms = %v, want %v", c.in, got.Terms, c.terms)
+		}
+	}
+	if _, err := Search(`#"unterminated`, ix); err == nil {
+		t.Error(`#"unterminated: want error`)
 	}
 }

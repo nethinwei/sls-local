@@ -257,7 +257,9 @@ func TestEndToEnd(t *testing.T) {
 			"order paid":                               125, // 裸词相邻 = and
 			"paid order":                               125,
 			`msg: "order paid"`:                        125,
-			`msg: "paid order"`:                        0, // 短语要求顺序
+			`msg: "paid order"`:                        125, // 引号里的各词都出现即可，不管顺序（实测）
+			`msg: #"paid order"`:                       0,   // 短语 #"..." 要求顺序
+			`msg: #"order paid"`:                       125,
 			"msg: pai*":                                125,
 			"msg: p*d":                                 125,
 			`msg: "pai*"`:                              0,  // 引号内 * 是字面量

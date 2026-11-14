@@ -63,6 +63,7 @@ services:
 | `-logstore` | | 预建 `project/logstore`，可重复（写入时也会自动创建） |
 | `-sql-utc-offset` | `8h` | SQL 时间函数的时区，SLS 默认东八区 |
 | `-version` | | 打印版本 |
+| `-reindex` | | 按 `-config` 里当前的索引重建全部日志的全文列后退出（先停掉正在运行的 sls-local） |
 
 ### 配置文件与索引
 
@@ -80,6 +81,8 @@ logstores:
 声明了索引的 logstore 按 SLS 的规则执行：没有字段索引的字段不能检索（报 SLS 同款错误），long / double 按数值匹配，SQL 只能用开启统计（`doc_value`）的字段。**用生产的索引配置，本地就能提前发现「看板用了没建索引的字段」这类问题。**
 
 没有声明索引的 logstore 自动为所有字段建 text 索引并开启统计，开箱即用；数值统计需要 `cast`。
+
+与 SLS 一样，修改索引配置只影响之后写入的日志。要让旧日志也按新索引检索，停掉 sls-local 后执行一次 `sls-local -reindex -data <数据文件> -config <配置文件>`（相当于 SLS 控制台的「重建索引」）。
 
 ## 兼容性
 

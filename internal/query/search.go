@@ -16,6 +16,10 @@ type Cond struct {
 	SQL   string
 	Args  []any
 	Terms []Term // meta.terms：检索语句里的词（SLS 用来高亮）
+	// Phrase 表示语句里有短语 #"..."（两个词以上）：SLS 按另一种方式执行，meta 不同（见 api）。
+	// Relaxed 是把短语放宽成「各词都出现」的条件，用来数候选行（meta.processedRows）。
+	Phrase  bool
+	Relaxed *Cond
 }
 
 // Term 是 meta.terms 的一项。
@@ -28,6 +32,13 @@ type Term struct {
 type Error struct{ Msg string }
 
 func (e *Error) Error() string { return e.Msg }
+
+// 短语查询的限制，SLS 的原文。
+const (
+	MsgPhraseInNot = "cannot use phrase query in not expression"
+	MsgPhraseSQL   = "cannot use phrase query among with sql"
+	MsgPhraseSPL   = "cannot use spl query together with phrase query"
+)
 
 // SLS 的原文，空格与标点照抄（插件按这些文案识别错误类型）。
 const (
@@ -73,6 +84,9 @@ func jsonPath(key string) string {
 	return `$."` + strings.ReplaceAll(strings.ReplaceAll(key, `\`, `\\`), `"`, `\"`) + `"`
 }
 
+// FieldSeparator 分隔全文列里的各部分（__source__、字段名、字段值）。它总是词边界，但短语里的词不能跨过它。
+const FieldSeparator = "\x1f"
+
 // Search 按索引 ix 解析检索语句，返回 WHERE 条件。空语句与 "*" 匹配全部。
 func Search(q string, ix *index.Index) (Cond, error) {
 	toks, err := lex(q)
@@ -100,11 +114,20 @@ func Search(q string, ix *index.Index) (Cond, error) {
 	if err != nil {
 		return Cond{}, err
 	}
-	return Cond{SQL: sql, Args: c.args, Terms: dedupTerms(terms(n, ix))}, nil
+	cond := Cond{SQL: sql, Args: c.args, Terms: dedupTerms(terms(n, ix)), Phrase: c.phrases > 0}
+	if cond.Phrase {
+		rc := &compiler{ix: ix, relaxed: true}
+		rsql, err := n.compile(rc)
+		if err != nil {
+			return Cond{}, err
+		}
+		cond.Relaxed = &Cond{SQL: rsql, Args: rc.args}
+	}
+	return cond, nil
 }
 
 // terms 按 SLS 的规则列出检索词：与（and）保持顺序，或（or）与二元 not 反序，一元 not 末尾补 *。
-// 数值字段记作 *；text 字段按分词符切词，不区分大小写时转小写，短语里的词按字母序。
+// 数值字段记作 *；text 字段按分词符切词，不区分大小写时转小写，多个词按字母序；短语 #"..." 记作原文。
 func terms(n node, ix *index.Index) []Term {
 	switch n := n.(type) {
 	case binary:
@@ -121,6 +144,9 @@ func terms(n node, ix *index.Index) []Term {
 		return []Term{{"*", ""}}
 	case term:
 		if n.key == "" {
+			if n.phrase && ix.Line != nil && len(splitWords(n.value, ix.Line.Tokens, false)) >= 2 {
+				return []Term{{n.value, ""}} // 短语记作引号里的原文（实测不转小写、保留标点）
+			}
 			return wordTerms(n.value, ix.Line, "", n.quoted)
 		}
 		lower := strings.ToLower(n.key)
@@ -134,6 +160,9 @@ func terms(n node, ix *index.Index) []Term {
 		}
 		if ok && (f.Type == "long" || f.Type == "double") {
 			return []Term{{"*", key}}
+		}
+		if n.phrase && ok && len(splitWords(n.value, f.Tokens, false)) >= 2 {
+			return []Term{{n.value, key}}
 		}
 		return wordTerms(n.value, f, key, n.quoted)
 	case cmp:
@@ -197,6 +226,7 @@ type tokKind int
 const (
 	tWord   tokKind = iota // 不加引号的词，可能带 key: 前缀
 	tQuoted                // 双引号字符串（已去掉转义）
+	tPhrase                // 短语 #"..."（text 是引号里的内容）
 	tLParen
 	tRParen
 	tLBrack
@@ -213,6 +243,21 @@ var singles = map[byte]tokKind{'(': tLParen, ')': tRParen, '[': tLBrack, ']': tR
 
 func lex(q string) ([]token, error) {
 	var out []token
+	// quoted 读出从 i 开始的引号串（i 指向 "），返回内容与结束位置
+	quoted := func(i int) (string, int, error) {
+		var b strings.Builder
+		j := i + 1
+		for ; j < len(q) && q[j] != '"'; j++ {
+			if q[j] == '\\' && j+1 < len(q) {
+				j++
+			}
+			b.WriteByte(q[j])
+		}
+		if j >= len(q) {
+			return "", 0, &Error{msgSyntaxPrefix + fmt.Sprintf("unterminated quotation mark at column:%d", i+1)}
+		}
+		return b.String(), j + 1, nil
+	}
 	for i := 0; i < len(q); {
 		c := q[i]
 		if k, ok := singles[c]; ok {
@@ -224,23 +269,29 @@ func lex(q string) ([]token, error) {
 		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
 			i++
 		case c == '"':
-			var b strings.Builder
-			j := i + 1
-			for ; j < len(q) && q[j] != '"'; j++ {
-				if q[j] == '\\' && j+1 < len(q) {
-					j++
-				}
-				b.WriteByte(q[j])
+			text, end, err := quoted(i)
+			if err != nil {
+				return nil, err
 			}
-			if j >= len(q) {
-				return nil, &Error{msgSyntaxPrefix + fmt.Sprintf("unterminated quotation mark at column:%d", i+1)}
-			}
-			out = append(out, token{tQuoted, b.String(), i, j + 1})
-			i = j + 1
+			out = append(out, token{tQuoted, text, i, end})
+			i = end
 		default:
 			j := i
 			for j < len(q) && !strings.ContainsRune(" \t\n\r()[]\"", rune(q[j])) {
 				j++
+			}
+			// 短语：#"..."，可以紧跟在 key: 后面（key:#"..."）
+			if j < len(q) && q[j] == '"' && q[j-1] == '#' && (j-1 == i || q[j-2] == ':') {
+				if j-1 > i {
+					out = append(out, token{tWord, q[i : j-1], i, j - 1})
+				}
+				text, end, err := quoted(j)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, token{tPhrase, text, j - 1, end})
+				i = end
+				continue
 			}
 			out = append(out, token{tWord, q[i:j], i, j})
 			i = j
@@ -381,7 +432,7 @@ func (p *parser) and() (node, bool, error) {
 // bareTermAhead 判断下一个记号是不是裸词（全文检索词）：可以与前一个裸词隐式 and。
 func (p *parser) bareTermAhead() bool {
 	t := p.peek()
-	if t.kind == tQuoted {
+	if t.kind == tQuoted || t.kind == tPhrase {
 		return true
 	}
 	if t.kind != tWord || isKeyword(t) {
@@ -443,8 +494,8 @@ func (p *parser) primary() (node, bool, error) {
 			return nil, false, p.unexpected(r, "')'")
 		}
 		return n, false, nil
-	case tQuoted:
-		return term{value: t.text, quoted: true}, true, nil
+	case tQuoted, tPhrase:
+		return term{value: t.text, quoted: true, phrase: t.kind == tPhrase}, true, nil
 	case tWord:
 		if isKeyword(t) {
 			return nil, false, p.unexpected(t, "")
@@ -479,8 +530,8 @@ func (p *parser) primary() (node, bool, error) {
 	}
 	v := p.next()
 	switch {
-	case v.kind == tQuoted:
-		return term{key: key, value: v.text, quoted: true}, false, nil
+	case v.kind == tQuoted || v.kind == tPhrase:
+		return term{key: key, value: v.text, quoted: true, phrase: v.kind == tPhrase}, false, nil
 	case v.kind == tWord && !isKeyword(v):
 		if i := strings.IndexByte(v.text, ':'); i >= 0 {
 			return nil, false, colonInValue(v.start + i)
@@ -539,8 +590,11 @@ func splitKey(w string) (key, value string, ok bool) {
 // ---------------- 编译 ----------------
 
 type compiler struct {
-	ix   *index.Index
-	args []any
+	ix      *index.Index
+	args    []any
+	negated int  // 所在 not 的层数：短语不能出现在 not 里
+	phrases int  // 编译到的短语个数
+	relaxed bool // 短语按「各词都出现」编译
 }
 
 // field 找到字段；没有索引的普通字段报 SLS 同款错误，没有索引的 tag 不报错（ok=false，按整值匹配）。
@@ -575,6 +629,8 @@ func (b binary) compile(c *compiler) (string, error) {
 type not struct{ x node }
 
 func (n not) compile(c *compiler) (string, error) {
+	c.negated++
+	defer func() { c.negated-- }()
 	x, err := n.x.compile(c)
 	if err != nil {
 		return "", err
@@ -598,6 +654,7 @@ type term struct {
 	key    string
 	value  string
 	quoted bool
+	phrase bool // #"..."：各词按顺序相邻出现
 }
 
 func (t term) compile(c *compiler) (string, error) {
@@ -609,12 +666,7 @@ func (t term) compile(c *compiler) (string, error) {
 		if c.ix.Line == nil {
 			return "", &Error{msgNoLineIndex}
 		}
-		// 全文列用换行连接各字段（见 store.fulltext），SLS 按字段分别分词，所以字段边界总是词边界
-		line := *c.ix.Line
-		if !strings.ContainsRune(line.Tokens, '\n') {
-			line.Tokens += "\n"
-		}
-		return c.textMatch("fulltext", nil, &line, t.value, wildcard), nil
+		return c.textMatch("fulltext", nil, c.ix.Line, t, FieldSeparator)
 	}
 	f, path, ok, err := c.field(t.key)
 	if err != nil {
@@ -644,7 +696,7 @@ func (t term) compile(c *compiler) (string, error) {
 		c.args = append(c.args, n)
 		return "coalesce(" + numeric(expr, f.Type) + " = ?, false)", nil
 	}
-	return c.textMatch(expr, args, f, t.value, wildcard), nil
+	return c.textMatch(expr, args, f, t, "")
 }
 
 // tagMatch 是没有索引的 tag 上的检索：整个值相等；不加引号时 * 匹配任意多个字符、? 匹配一个。
@@ -662,26 +714,93 @@ func (c *compiler) tagMatch(key, value string, wildcard bool) string {
 	return "coalesce(regexp_matches(" + expr + ", ?), false)"
 }
 
-// textMatch 按字段的分词符把值切成词，要求它们在字段文本中连续出现（短语），两端是分词符或文本边界。
-// 不加引号的值里 * 与 ? 是词内通配符。值中没有任何词时匹配不到。
-func (c *compiler) textMatch(expr string, exprArgs []any, f *index.Field, value string, wildcard bool) string {
+// textMatch 按字段的分词符把值切成词。普通的值（加不加引号都一样）要求每个词都在字段文本里出现，不管顺序与
+// 位置（实测 "declined card" 与 declined,card 都能命中 card declined）；短语 #"..." 要求各词按顺序相邻出现
+// （之间只隔分词符），且不跨字段。不加引号的值里 * 与 ? 是词内通配符。值中没有任何词时匹配不到。
+// sep 是全文列里字段之间的分隔符（字段上为空）。
+func (c *compiler) textMatch(expr string, exprArgs []any, f *index.Field, t term, sep string) (string, error) {
+	value, wildcard := t.value, !t.quoted
 	if !f.CaseSensitive {
 		expr, value = "lower("+expr+")", strings.ToLower(value)
 	}
-	pattern, ok := tokenPattern(value, f.Tokens, wildcard)
-	if !ok {
-		return "FALSE"
+	phrase := t.phrase && len(splitWords(value, f.Tokens, wildcard)) >= 2 // 一个词的 #"x" 就是普通的词
+	if phrase {
+		if c.negated > 0 {
+			return "", &Error{MsgPhraseInNot}
+		}
+		c.phrases++
+		phrase = !c.relaxed
 	}
-	match := "coalesce(regexp_matches(" + expr + ", ?), false)"
-	// 直接取列的（全文、__topic__、__source__）先用子串查找排除大部分行，正则只跑剩下的（约快一倍）。
-	// 正则匹配时其中的每个字面片段都必然出现在文本里，所以不会漏。JSON 字段上不加：再取一遍值比正则还贵。
-	if lit := longestLiteral(value, f.Tokens, wildcard); len(exprArgs) == 0 && lit != "" {
-		c.args = append(c.args, lit, pattern)
-		return "(contains(" + expr + ", ?) AND " + match + ")"
+	pats := textPatterns(value, f.Tokens, sep, wildcard, phrase)
+	if len(pats) == 0 {
+		return "FALSE", nil
 	}
-	c.args = append(c.args, exprArgs...)
-	c.args = append(c.args, pattern)
-	return match
+	conds := make([]string, len(pats))
+	for i, pat := range pats {
+		match := "coalesce(regexp_matches(" + expr + ", ?), false)"
+		// 直接取列的（全文、__topic__、__source__）先用子串查找排除大部分行，正则只跑剩下的（约快一倍）。
+		// 正则匹配时其中的每个字面片段都必然出现在文本里，所以不会漏。JSON 字段上不加：再取一遍值比正则还贵。
+		if len(exprArgs) == 0 && pat.literal != "" {
+			c.args = append(c.args, pat.literal, pat.re)
+			conds[i] = "(contains(" + expr + ", ?) AND " + match + ")"
+			continue
+		}
+		c.args = append(c.args, exprArgs...)
+		c.args = append(c.args, pat.re)
+		conds[i] = match
+	}
+	if len(conds) == 1 {
+		return conds[0], nil
+	}
+	return "(" + strings.Join(conds, " AND ") + ")", nil
+}
+
+// splitWords 按分词符把值切成词；不加引号时 * 与 ? 是通配符，不切。
+func splitWords(value, tokens string, wildcard bool) []string {
+	if wildcard {
+		tokens = strings.NewReplacer("*", "", "?", "").Replace(tokens)
+	}
+	return strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(tokens, r) })
+}
+
+// textPattern 是一个要匹配的正则与其中最长的字面片段（用于子串预过滤，可为空）。
+type textPattern struct{ re, literal string }
+
+// textPatterns 把检索值编译成 RE2：普通值每个词一个正则（都要匹配），短语一个正则。词的两端是分词符、
+// sep 或文本边界；短语里的词之间只能隔分词符（不能隔 sep，即不跨字段）。
+func textPatterns(value, tokens, sep string, wildcard, phrase bool) []textPattern {
+	// 查询值里的 * 与 ? 是通配符，不切词；数据仍按全部分词符切（url 里的 ? 是分隔符）
+	words := splitWords(value, tokens, wildcard)
+	if len(words) == 0 {
+		return nil
+	}
+	bound := charClass(tokens+sep, false)
+	wordChar := charClass(tokens+sep, true)
+	quote := func(w string) string {
+		q := regexp.QuoteMeta(w)
+		if wildcard {
+			q = strings.ReplaceAll(q, `\*`, wordChar+`*`)
+			q = strings.ReplaceAll(q, `\?`, wordChar)
+		}
+		return q
+	}
+	wrap := func(body string) string { return `(^|` + bound + `)` + body + `($|` + bound + `)` }
+	if phrase {
+		parts := make([]string, len(words))
+		for i, w := range words {
+			parts[i] = quote(w)
+		}
+		return []textPattern{{wrap(strings.Join(parts, charClass(tokens, false)+`+`)), longestLiteral(value, tokens, wildcard)}}
+	}
+	out := make([]textPattern, 0, len(words))
+	seen := map[string]bool{}
+	for _, w := range words {
+		if !seen[w] { // 重复的词只要匹配一次
+			seen[w] = true
+			out = append(out, textPattern{wrap(quote(w)), longestLiteral(w, tokens, wildcard)})
+		}
+	}
+	return out
 }
 
 // longestLiteral 是检索值里最长的一段不含通配符与分词符的文字。分词符可以是字母或汉字（索引配置允许），
@@ -789,34 +908,14 @@ func parseNumber(s, typ string) (any, bool) {
 	return n, err == nil
 }
 
-// tokenPattern 把检索值编译成 RE2：值内各词以分词符相连，两端是分词符或文本边界。
-// tokens 是字段的分词符；wildcard 时 * 与 ? 是词内通配符而不是分词符。值中没有任何词时 ok=false。
-func tokenPattern(value, tokens string, wildcard bool) (string, bool) {
-	// 查询值里的 * 与 ? 是通配符，不切词；数据仍按全部分词符切（url 里的 ? 是分隔符）
-	splitBy := tokens
-	if wildcard {
-		splitBy = strings.NewReplacer("*", "", "?", "").Replace(tokens)
-	}
-	words := strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(splitBy, r) })
-	if len(words) == 0 {
-		return "", false
-	}
-	delim := charClass(tokens, false)
-	word := charClass(tokens, true)
-	parts := make([]string, len(words))
-	for i, w := range words {
-		q := regexp.QuoteMeta(w)
-		if wildcard {
-			q = strings.ReplaceAll(q, `\*`, word+`*`)
-			q = strings.ReplaceAll(q, `\?`, word)
-		}
-		parts[i] = q
-	}
-	return `(^|` + delim + `)` + strings.Join(parts, delim+`+`) + `($|` + delim + `)`, true
-}
-
 // charClass 生成分词符的 RE2 字符类；negate 时是「非分词符」。
 func charClass(tokens string, negate bool) string {
+	if tokens == "" { // 没有分词符：[] 不是合法的 RE2，换成「什么也不匹配」/「匹配任意字符」
+		if negate {
+			return `[\x00-\x{10FFFF}]`
+		}
+		return `[^\x00-\x{10FFFF}]`
+	}
 	var b strings.Builder
 	b.WriteByte('[')
 	if negate {
@@ -834,7 +933,11 @@ func charClass(tokens string, negate bool) string {
 		case '\r':
 			b.WriteString(`\r`)
 		default:
-			b.WriteRune(r)
+			if r < 0x20 || r == 0x7f {
+				fmt.Fprintf(&b, `\x{%x}`, r)
+			} else {
+				b.WriteRune(r)
+			}
 		}
 	}
 	b.WriteByte(']')

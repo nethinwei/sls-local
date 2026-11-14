@@ -62,7 +62,20 @@ func (s *Server) getLogs(w http.ResponseWriter, r *http.Request, project string)
 		return
 	}
 
-	m := baseMeta(plan, int64(len(res.Rows)), int64(len(res.Rows)), start, false)
+	count, offset := int64(len(res.Rows)), max(req.Offset, 0)
+	processed := count
+	full := count == lines // 凑满了一页
+	if plan.Where.Phrase && !full {
+		// 短语查询没凑满一页时扫完了全部候选行（各词都出现的），processedRows 是候选行数（实测）
+		if processed, err = s.store.Count(r.Context(), store.SearchParams{Project: project, Logstore: logstore,
+			From: req.From, FromNs: req.FromNsPart, To: req.To, ToNs: req.ToNsPart, Where: *plan.Where.Relaxed}); err != nil {
+			s.failQuery(w, r, err)
+			return
+		}
+	} else if plan.Where.Phrase {
+		processed = offset + count
+	}
+	m := baseMeta(plan, count, processed, start, false)
 	if len(res.Keys) > 0 { // 没有结果时 SLS 不返回 keys
 		m.add("keys", capKeys(res.Keys))
 	}
@@ -70,6 +83,18 @@ func (s *Server) getLogs(w http.ResponseWriter, r *http.Request, project string)
 	if plan.SPL {
 		m.add("new_mode", 4)
 		m.add("scanBytes", 0)
+	}
+	if plan.Where.Phrase { // 短语查询走另一种执行方式，多出这几项（实测，见 docs/wire-findings.md）
+		if count > 0 {
+			m.add("new_mode", 1)
+			m.add("mode", 1)
+		}
+		info := &meta{}
+		info.add("scanAll", !full)
+		info.add("beginOffset", max(offset-lines, 0))
+		info.add("endOffset", offset+count)
+		info.add("endTime", res.LastTime)
+		m.add("phraseQueryInfo", info)
 	}
 	m.add("isAccurate", true)
 	writeRows(w, m, res.Rows)

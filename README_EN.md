@@ -63,6 +63,7 @@ services:
 | `-logstore` | | Create `project/logstore` at startup, repeatable (logstores are also created on first write) |
 | `-sql-utc-offset` | `8h` | Time zone of SQL time functions; SLS defaults to UTC+8 |
 | `-version` | | Print the version |
+| `-reindex` | | Rebuild the full-text column of all logs with the current indexes in `-config`, then exit (stop the running sls-local first) |
 
 ### Configuration and indexes
 
@@ -80,6 +81,8 @@ logstores:
 Logstores with a declared index follow SLS rules: fields without an index cannot be searched (with the same error as SLS), long / double fields match numerically, and SQL can only use fields with statistics (`doc_value`). **With your production index, you find "the dashboard uses a field that has no index" before deploying.**
 
 Logstores without a declared index get a text index with statistics on every field, so they work out of the box; numeric aggregation then needs `cast`.
+
+As in SLS, changing an index only affects logs written afterwards. To search older logs with the new index, stop sls-local and run `sls-local -reindex -data <data file> -config <config file>` once (the equivalent of "rebuild index" in the SLS console).
 
 ## Compatibility
 

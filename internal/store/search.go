@@ -30,8 +30,9 @@ type SearchParams struct {
 
 // SearchResult 是检索结果。
 type SearchResult struct {
-	Rows [][]byte // 每行是按 SLS 字段顺序编码好的 JSON 对象
-	Keys []string // 返回行的键并集，按出现顺序（不含 __time__、__time_ns_part__、__pack_meta__）
+	Rows     [][]byte // 每行是按 SLS 字段顺序编码好的 JSON 对象
+	Keys     []string // 返回行的键并集，按出现顺序（不含 __time__、__time_ns_part__、__pack_meta__）
+	LastTime int64    // 最后一行的 __time__（没有行时为 0）
 }
 
 func (p *SearchParams) where() (string, []any) {
@@ -55,15 +56,23 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	if p.Reverse {
 		order = "DESC"
 	}
-	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i FROM logs WHERE `+where+
+	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys FROM logs WHERE `+where+
 		` AND t BETWEEN ? AND ?`, p.Stages)
 	extCols := ""
 	for _, c := range ext {
 		extCols += ", " + c
 	}
-	q := fmt.Sprintf(`SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0)%s
+	q := fmt.Sprintf(`SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0), orig_keys%s
 		FROM (%s) ORDER BY t %s, coalesce(ns, 0) %s, seq %s LIMIT ? OFFSET ?`, extCols, src, order, order, order)
 	count := `SELECT count(*) FROM (` + src + `)`
+
+	// 各窗口（以及翻页时先数后取）的查询放在同一个事务里：看到的是同一时刻的数据（DuckDB 的快照隔离），
+	// 查询之间有新日志写入也不会让结果重复或错开
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback() // 只读，不提交
 
 	assemble := needsAssembly(p.Stages)
 	var splRows []splRow
@@ -72,7 +81,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	limit, offset := p.Limit, p.Offset
 	// scan 取窗口 [lo, hi] 里的一页，返回取到的行数
 	scan := func(lo, hi, limit, offset int64) (int64, error) {
-		rows, err := s.db.QueryContext(ctx, q, append(args, lo, hi, limit, offset)...)
+		rows, err := tx.QueryContext(ctx, q, append(args, lo, hi, limit, offset)...)
 		if err != nil {
 			return 0, queryError(err)
 		}
@@ -81,21 +90,29 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 		for rows.Next() {
 			n++
 			var r row
+			var origKeys sql.NullString
 			extVals := make([]any, len(ext))
-			dest := []any{&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &r.packN, &r.packI}
+			dest := []any{&r.seq, &r.t, &r.ns, &r.topic, &r.source, &r.tags, &r.contents, &r.packN, &r.packI, &origKeys}
 			for i := range extVals {
 				dest = append(dest, &extVals[i])
 			}
 			if err := rows.Scan(dest...); err != nil {
 				return 0, err
 			}
+			res.LastTime = r.t
 			if assemble {
 				rr := r
 				splRows = append(splRows, (&rr).assemble(p.Stages, extVals, p.PackMeta))
 				continue
 			}
 			res.Rows = append(res.Rows, r.encode(searchLayout, p.PackMeta, 0))
-			keys.addObject(r.contents)
+			if origKeys.Valid { // 有重复字段名：SLS 的 keys 列的是原始字段名，不含改名产生的
+				var names []string
+				_ = json.Unmarshal([]byte(origKeys.String), &names)
+				keys.add(names...)
+			} else {
+				keys.addObject(r.contents)
+			}
 			if p.PackMeta {
 				keys.add("__pack_meta__")
 			}
@@ -117,7 +134,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 		}
 		if offset > 0 { // 整个窗口都在 offset 之内就只数一下，不取行
 			var n int64
-			if err := s.db.QueryRowContext(ctx, count, append(args, lo, hi)...).Scan(&n); err != nil {
+			if err := tx.QueryRowContext(ctx, count, append(args, lo, hi)...).Scan(&n); err != nil {
 				return nil, queryError(err)
 			}
 			if n <= offset {
@@ -130,6 +147,9 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 		if err != nil {
 			return nil, err
 		}
+		if afterWindow != nil {
+			afterWindow()
+		}
 		w.found(n+offset, limit-n) // 这个窗口命中了 offset 跳过的与取到的
 		limit -= n
 		offset = 0
@@ -140,6 +160,19 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	}
 	return res, nil
 }
+
+// Count 数时间范围内满足条件的日志条数。
+func (s *Store) Count(ctx context.Context, p SearchParams) (int64, error) {
+	where, args := p.where()
+	var n int64
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+where, args...).Scan(&n); err != nil {
+		return 0, queryError(err)
+	}
+	return n, nil
+}
+
+// afterWindow 是测试钩子：每查完一个窗口调用一次。
+var afterWindow func()
 
 // timeWindows 把 [from, to]（秒）从一端起切成互不重叠的窗口。第一个窗口取总跨度的 1/32；之后按已扫部分的
 // 命中密度估算还要多大范围才能凑够（多估 1/4），一直没有命中时剩下的一次查完。

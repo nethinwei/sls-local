@@ -161,3 +161,44 @@ func TestTimeWindowsBounded(t *testing.T) {
 		}
 	}
 }
+
+// 翻页跨多个窗口时，期间写入的日志不影响这一页：各窗口的查询看到同一时刻的数据。
+func TestSearchSnapshot(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, "", Options{SQLOffset: DefaultSQLOffset})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	const base = 1_800_000_000
+	put := func(sec uint32, v string) {
+		ns := uint32(0)
+		if err := s.Append(ctx, "p", "l", &Group{Logs: []Log{{Time: base + sec, TimeNs: &ns, Contents: []KV{{"v", v}}}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 最新的 1/32 时段只有 1 条，凑不够一页，要继续查更早的窗口
+	put(3199, "newest")
+	for i := range 50 {
+		put(uint32(i), "old")
+	}
+	p := SearchParams{Project: "p", Logstore: "l", From: base, To: base + 3200, Where: query.Cond{SQL: "TRUE"}, Limit: 20, Reverse: true}
+	want, err := s.Search(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterWindow = func() { put(45, "late") } // 第一个窗口查完后，往还没查到、且在这一页范围内的时段写一条
+	defer func() { afterWindow = nil }()
+	got, err := s.Search(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rows) != len(want.Rows) {
+		t.Fatalf("%d rows, want %d", len(got.Rows), len(want.Rows))
+	}
+	for i := range want.Rows {
+		if string(got.Rows[i]) != string(want.Rows[i]) {
+			t.Fatalf("row %d = %s, want %s", i, got.Rows[i], want.Rows[i])
+		}
+	}
+}

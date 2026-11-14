@@ -16,7 +16,7 @@
   "sql-functions/array-agg": "数组元素按 Presto 内部哈希顺序排列；结果值不同",
   "sql-functions/histogram-fn": "map 的键按 Presto 内部哈希顺序排列；结果值不同",
   "sql-functions/ip-funcs": "ip_to_* 有意不实现（需要 IP 库；Loki 只在采集端做 geoip）；状态码 200→400",
-  "sql-functions/map-agg": "map 的键按 Presto 内部哈希顺序排列；结果值不同",
+  "sql-functions/map-agg": "不稳定：map 的键按 Presto 内部哈希顺序排列，DuckDB 的顺序有时碰巧相同",
   "sql-functions/numeric-histogram": "numeric_histogram 有意不实现（Loki 也没有）；状态码 200→400",
   "sql/concat-pipes": "不聚合的 SQL 凑够 LIMIT 后云端提前停止扫描，processedRows 取决于内部的扫描块；meta.processedRows 值不同",
   "sql/limit-default": "不聚合的 SQL 凑够 LIMIT 后云端提前停止扫描，processedRows 取决于内部的扫描块；meta.processedRows 值不同",

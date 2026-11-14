@@ -39,6 +39,9 @@ func ParseFor(q string, ix *index.Index, logstore string) (*Plan, error) {
 	}
 	p := &Plan{Query: q, Pipes: rest, Terms: where.Terms, Search: search, Where: where}
 	if sqlStart.MatchString(rest) {
+		if where.Phrase {
+			return nil, &Error{MsgPhraseSQL}
+		}
 		if sqlEngine == "antlr" {
 			p.SQL, err = translatePresto(sqlPart(rest), ix, logstore)
 		} else {
@@ -49,7 +52,13 @@ func ParseFor(q string, ix *index.Index, logstore string) (*Plan, error) {
 		}
 		return p, nil
 	}
-	return p, p.parseSPL(rest, ix)
+	if err := p.parseSPL(rest, ix); err != nil {
+		return nil, err
+	}
+	if p.SPL && where.Phrase {
+		return nil, &Error{MsgPhraseSPL}
+	}
+	return p, nil
 }
 
 // Stage 是 SPL 的一条命令。where、extend 的表达式是 logs 表上的 SQL（字段按 varchar 取值），

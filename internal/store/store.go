@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/duckdb/duckdb-go/v2"
+
+	"github.com/nethinwei/sls-local/internal/query"
 )
 
 const schema = `
@@ -35,13 +37,15 @@ CREATE TABLE IF NOT EXISTS logs (
 	source   VARCHAR NOT NULL,
 	tags     VARCHAR NOT NULL,  -- JSON 对象，键带 __tag__: 前缀，按写入顺序
 	contents VARCHAR NOT NULL,  -- JSON 对象，字段按写入顺序
-	fulltext VARCHAR NOT NULL   -- 全文检索的文本：__source__、字段名与字段值，以换行连接（见 fulltext()）
+	fulltext VARCHAR NOT NULL   -- 全文检索的文本：__source__、字段名与字段值，以 \x1f 分隔（见 fulltext()）
 );
 -- 上下文：同一来源（pack_id 去掉最后一段序号）的日志按写入顺序相邻
 ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_ctx VARCHAR;
 -- __pack_meta__ 的后两段：日志所在包（LogGroup）的条数与它在包里的序号
 ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_n INTEGER;
 ALTER TABLE logs ADD COLUMN IF NOT EXISTS pack_i INTEGER;
+-- 有重复字段名时，原始字段名去重后的列表（JSON 数组，meta.keys 用）；没有重复时为 NULL
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS orig_keys VARCHAR;
 -- 数据格式的版本等元信息
 CREATE TABLE IF NOT EXISTS sls_meta (key VARCHAR PRIMARY KEY, value VARCHAR);`
 
@@ -133,18 +137,20 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 	return s, nil
 }
 
-// fulltextVersion 是全文列的生成规则版本：2 起包含 __source__ 与字段名、不含数值字段的值（v0.2.0）。
-const fulltextVersion = "2"
+// fulltextVersion 是全文列的生成规则版本：2 起包含 __source__ 与字段名、不含数值字段的值；3 起各部分以
+// \x1f 分隔（短语不能跨字段）、重复的字段名按 SLS 的规则改名（v0.2.0）。
+const fulltextVersion = "3"
 
-// RebuildFulltext 把旧版本写入的全文列按当前规则重建（升级后第一次启动时执行一次）。numeric 返回
-// logstore 里按 long/double 建了索引的字段。返回重建的行数；已经是当前版本时为 0。
-func (s *Store) RebuildFulltext(ctx context.Context, numeric func(project, logstore string) map[string]bool) (int64, error) {
+// RebuildFulltext 把旧版本写入的全文列按当前规则重建（升级后第一次启动时执行一次）；force 时不管版本，
+// 按当前的索引配置全部重建（sls-local -reindex）。numeric 返回 logstore 里按 long/double 建了索引的字段。
+// 返回重建的行数；已经是当前版本且不 force 时为 0。
+func (s *Store) RebuildFulltext(ctx context.Context, numeric func(project, logstore string) map[string]bool, force bool) (int64, error) {
 	var v sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM sls_meta WHERE key = 'fulltext_version'`).Scan(&v)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	if v.String == fulltextVersion {
+	if v.String == fulltextVersion && !force {
 		return 0, nil
 	}
 	s.mu.Lock() // 重建期间不接受写入
@@ -286,7 +292,7 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 
 	// 编码在锁外做，锁内只剩 Appender 写入
 	type encoded struct {
-		ns                 any
+		ns, origKeys       any
 		contents, fulltext string
 	}
 	enc := make([]encoded, len(g.Logs))
@@ -294,8 +300,12 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 		if l.TimeNs != nil {
 			enc[i].ns = int32(*l.TimeNs)
 		}
-		enc[i].contents = objectJSON(dedupe(l.Contents))
-		enc[i].fulltext = fulltext(g.Source, l.Contents, g.NumericKeys)
+		fields, orig := renameDuplicates(l.Contents)
+		if orig != nil {
+			enc[i].origKeys = *orig
+		}
+		enc[i].contents = objectJSON(fields)
+		enc[i].fulltext = fulltext(g.Source, fields, g.NumericKeys)
 	}
 
 	s.mu.Lock()
@@ -303,7 +313,7 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 	for i, l := range g.Logs {
 		s.seq++
 		if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), enc[i].ns, g.Topic, g.Source,
-			tagsJSON, enc[i].contents, enc[i].fulltext, packCtx, int32(len(g.Logs)), int32(i)); err != nil {
+			tagsJSON, enc[i].contents, enc[i].fulltext, packCtx, int32(len(g.Logs)), int32(i), enc[i].origKeys); err != nil {
 			return fmt.Errorf("append: %w", err)
 		}
 	}
@@ -313,17 +323,29 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 	return nil
 }
 
-// dedupe 去掉重复的字段名（保留第一个），JSON 对象里重复的键无法按名字取值。
-func dedupe(kvs []KV) []KV {
-	seen := make(map[string]bool, len(kvs))
-	out := kvs[:0:0]
-	for _, kv := range kvs {
-		if !seen[kv.Key] {
-			seen[kv.Key] = true
-			out = append(out, kv)
+// renameDuplicates 按 SLS 的规则给重复的字段名改名：同名字段第 n 次出现（n ≥ 2）改成 名字_{n-2}，
+// 位置不变，也不检查改名后是否与其他字段重名（实测 SLS 的响应里会出现重复的键）。按名字取值时取第一个，
+// 与 SLS 相同。有重复时另外返回原始字段名去重后的 JSON 数组：SLS 的 meta.keys 用的是它。
+func renameDuplicates(kvs []KV) ([]KV, *string) {
+	if !hasDuplicateKey(kvs) { // 绝大多数日志没有重复字段：不分配
+		return kvs, nil
+	}
+	seen := make(map[string]int, len(kvs))
+	out := make([]KV, len(kvs))
+	var orig []string
+	for i, kv := range kvs {
+		n := seen[kv.Key]
+		seen[kv.Key] = n + 1
+		out[i] = kv
+		if n == 0 {
+			orig = append(orig, kv.Key)
+		} else {
+			out[i].Key = kv.Key + "_" + strconv.Itoa(n-1)
 		}
 	}
-	return out
+	b, _ := json.Marshal(orig)
+	keys := string(b)
+	return out, &keys
 }
 
 // objectJSON 按给定顺序编码成 JSON 对象。
@@ -358,8 +380,30 @@ func writeString(b *bytes.Buffer, s string) {
 	b.WriteByte('"')
 }
 
+func hasDuplicateKey(kvs []KV) bool {
+	if len(kvs) <= 16 { // 字段少时两两比较比建 map 快
+		for i := range kvs {
+			for j := range i {
+				if kvs[j].Key == kvs[i].Key {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	seen := make(map[string]bool, len(kvs))
+	for _, kv := range kvs {
+		if seen[kv.Key] {
+			return true
+		}
+		seen[kv.Key] = true
+	}
+	return false
+}
+
 // fulltext 是全文检索的文本。实测 SLS 的全文检索也能匹配字段名（搜 currency 命中带这个字段的日志）
-// 与 __source__，但匹配不到 long/double 字段的值，也匹配不到 tag。
+// 与 __source__，但匹配不到 long/double 字段的值，也匹配不到 tag。各部分以 query.FieldSeparator 分隔：
+// SLS 按字段分别分词，短语（#"..."）不能跨字段。值里本身带 \x1f 的极少，那里也会被当成字段边界。
 func fulltext(source string, kvs []KV, numeric map[string]bool) string {
 	parts := make([]string, 0, 2*len(kvs)+1)
 	parts = append(parts, source)
@@ -369,7 +413,7 @@ func fulltext(source string, kvs []KV, numeric map[string]bool) string {
 			parts = append(parts, kv.Value)
 		}
 	}
-	return strings.Join(parts, "\n")
+	return strings.Join(parts, query.FieldSeparator)
 }
 
 // DeleteBefore 删除 __time__ 早于 cutoff 的日志，返回删除条数。

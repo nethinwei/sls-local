@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -26,6 +27,9 @@ type objects interface {
 	List(ctx context.Context, prefix string) ([]string, error)
 	// Delete 删除对象，不存在不算错。
 	Delete(ctx context.Context, key string) error
+	// ReadSmall、WriteSmall 读写小对象（写入节点的租约）。对象不存在时 ReadSmall 返回 fs.ErrNotExist。
+	ReadSmall(ctx context.Context, key string) ([]byte, error)
+	WriteSmall(ctx context.Context, key string, data []byte) error
 	String() string
 }
 
@@ -108,6 +112,22 @@ func (o fsObjects) List(_ context.Context, prefix string) ([]string, error) {
 
 func (o fsObjects) Delete(_ context.Context, key string) error { return removeIfExists(o.path(key)) }
 
+func (o fsObjects) ReadSmall(_ context.Context, key string) ([]byte, error) {
+	return os.ReadFile(o.path(key))
+}
+
+func (o fsObjects) WriteSmall(_ context.Context, key string, data []byte) error {
+	dst := o.path(key)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp := dst + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
 // copyFile 复制文件：先写临时文件、同步后改名，读的一方不会看到写了一半的文件。
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
@@ -183,6 +203,28 @@ func (o *s3Objects) List(ctx context.Context, prefix string) ([]string, error) {
 
 func (o *s3Objects) Delete(ctx context.Context, key string) error {
 	return o.c.RemoveObject(ctx, o.bucket, o.prefix+key, minio.RemoveObjectOptions{})
+}
+
+func (o *s3Objects) ReadSmall(ctx context.Context, key string) ([]byte, error) {
+	obj, err := o.c.GetObject(ctx, o.bucket, o.prefix+key, minio.GetObjectOptions{})
+	if err == nil {
+		var data []byte
+		data, err = io.ReadAll(obj)
+		obj.Close()
+		if err == nil {
+			return data, nil
+		}
+	}
+	if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		return nil, fmt.Errorf("%s: %w", key, fs.ErrNotExist)
+	}
+	return nil, err
+}
+
+func (o *s3Objects) WriteSmall(ctx context.Context, key string, data []byte) error {
+	_, err := o.c.PutObject(ctx, o.bucket, o.prefix+key, bytes.NewReader(data), int64(len(data)),
+		minio.PutObjectOptions{ContentType: "application/json"})
+	return err
 }
 
 // objectKey 是分段（或旁路文件）在对象存储里的键：分段目录下的相对路径。

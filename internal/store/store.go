@@ -105,6 +105,11 @@ type Store struct {
 	writerID    int64
 	readOnly    bool
 	stats       counters
+
+	leaseToken string      // 见 lease.go
+	fenced     atomic.Bool // 租约被别的写入节点拿走了
+	stopLease  context.CancelFunc
+	leaseDone  chan struct{}
 }
 
 // dsnOptions 关掉 DuckDB 安装扩展的能力；integer_division 让整数相除得整数（与 SLS/Presto 一致）。
@@ -223,7 +228,17 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
+	if s.remote != nil && !s.readOnly {
+		if err := s.acquireLease(ctx); err != nil {
+			db.Close()
+			return nil, err
+		}
+		lctx, cancel := context.WithCancel(context.Background())
+		s.stopLease, s.leaseDone = cancel, make(chan struct{})
+		go s.leaseKeeper(lctx, s.leaseDone)
+	}
 	if s.cur, err = s.loadSegments(ctx); err != nil {
+		s.closeLease()
 		db.Close()
 		return nil, err
 	}
@@ -384,6 +399,7 @@ func (s *Store) Close() error {
 		s.stopFlusher()
 		<-s.flusherDone
 	}
+	s.closeLease()
 	if s.tempSegDir != "" {
 		defer os.RemoveAll(s.tempSegDir)
 	}
@@ -402,8 +418,28 @@ func (s *Store) Close() error {
 	return err
 }
 
-// Ping 检查数据库能不能用（就绪检查）。
-func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+// closeLease 停止续约并删掉自己的租约。
+func (s *Store) closeLease() {
+	if s.stopLease == nil {
+		return
+	}
+	s.stopLease()
+	<-s.leaseDone
+	s.stopLease = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.releaseLease(ctx); err != nil && s.onError != nil {
+		s.onError(fmt.Errorf("release lease: %w", err))
+	}
+}
+
+// Ping 检查存储能不能用（就绪检查）：数据库可用，写入节点的租约没被别人拿走。
+func (s *Store) Ping(ctx context.Context) error {
+	if s.fenced.Load() {
+		return ErrFenced
+	}
+	return s.db.PingContext(ctx)
+}
 
 // EnsureLogstore 登记一个 logstore（已存在时什么也不做）。
 func (s *Store) EnsureLogstore(ctx context.Context, project, logstore string) error {
@@ -459,6 +495,10 @@ func (s *Store) Logstore(ctx context.Context, project, logstore string) (Logstor
 	return i, err == nil, err
 }
 
+// ErrSeqExhausted 是写入节点用完了自己编号下的 seq（每个编号 2^48 条，每秒 10 万条约 89 年）。换一个没用过的
+// -writer-id、用空的数据目录启动（旧编号的分段仍然可查，过期后由其他写入节点删除）。
+var ErrSeqExhausted = errors.New("this write node has used up its sequence numbers; restart it with an unused -writer-id and an empty data directory")
+
 // ErrReadOnly 是查询节点收到写入。
 var ErrReadOnly = errors.New("this node only serves queries")
 
@@ -466,6 +506,9 @@ var ErrReadOnly = errors.New("this node only serves queries")
 func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) error {
 	if s.readOnly {
 		return ErrReadOnly
+	}
+	if s.fenced.Load() {
+		return ErrFenced
 	}
 	if len(g.Logs) == 0 {
 		return nil
@@ -506,6 +549,9 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 	seq, err := func() (int64, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if writerOf(s.seq+int64(len(g.Logs))) != s.writerID { // 编号最大时加过头会变成负数，同样拒绝
+			return 0, fmt.Errorf("%w: writer id %d", ErrSeqExhausted, s.writerID)
+		}
 		for i, l := range g.Logs {
 			s.seq++
 			if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), enc[i].ns, g.Topic, g.Source,
@@ -621,10 +667,18 @@ func fulltext(source string, kvs []KV, numeric map[string]bool) string {
 // DeleteBefore 删除 __time__ 早于 cutoff 的日志，返回删除条数。分段按整个文件删除：一个分段里最晚的日志
 // 也早于 cutoff 时才删（分段按小时划分，最多多留一小时）。
 func (s *Store) DeleteBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	if s.fenced.Load() {
+		return 0, ErrFenced
+	}
 	r, err := s.db.ExecContext(ctx, `DELETE FROM logs WHERE t < ?`, cutoff.Unix())
 	if err != nil {
 		return 0, err
 	}
 	n, err := r.RowsAffected()
-	return n + s.dropSegmentsBefore(cutoff.Unix()), err
+	if err != nil {
+		return 0, err
+	}
+	n += s.dropSegmentsBefore(cutoff.Unix())
+	m, err := s.dropAbandonedBefore(ctx, cutoff.Unix())
+	return n + m, err
 }

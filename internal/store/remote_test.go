@@ -30,6 +30,7 @@ func remoteKeys(t *testing.T, dir string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys = slices.DeleteFunc(keys, func(k string) bool { return strings.HasPrefix(k, "_writers/") }) // 租约
 	slices.Sort(keys)
 	return keys
 }

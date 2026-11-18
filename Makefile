@@ -13,8 +13,9 @@ build: ## 编译到 bin/sls-local（需要 cgo）
 test: ## 运行全部测试（含竞态检测）
 	go test -race ./...
 
-test-segments: ## 同一套测试，头部每满 3 行就刷成 Parquet 分段
+test-segments: ## 同一套测试，头部每满 3 行就刷成 Parquet 分段；再放进对象存储（临时目录）跑一遍
 	SLS_LOCAL_TEST_FLUSH_ROWS=3 go test -race ./...
+	SLS_LOCAL_TEST_FLUSH_ROWS=3 SLS_LOCAL_TEST_REMOTE=1 go test -race ./...
 
 golden: ## 只跑与真实 SLS 的对照测试（docs/golden.md）
 	go test ./internal/golden -run TestGolden -v -count=1 | grep -E '^(---|===|ok|FAIL)|cases match' | grep -v '^=== RUN' | tail -40

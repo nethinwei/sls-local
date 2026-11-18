@@ -43,6 +43,7 @@ type segment struct {
 
 // snapshot 是查询看到的数据：头部里 seq > boundary 的行加上 segs。
 type snapshot struct {
+	st       *Store // 读分段的旁路文件（字段列、bloom）
 	gen      int64
 	boundary int64
 	segs     []segment
@@ -89,6 +90,7 @@ func (s *Store) release(sn *snapshot) {
 func (s *Store) publish(next *snapshot, after func()) {
 	s.segMu.Lock()
 	next.gen = s.cur.gen + 1
+	next.st = s
 	if s.cur.refs > 0 {
 		s.live = append(s.live, s.cur)
 	}
@@ -128,8 +130,8 @@ const baseCols = "project, logstore, seq, t, ns, topic, source, tags, contents, 
 // （fieldcol.Ref）。不需要时间裁剪时 from = 0、to = math.MaxInt64。
 //
 // 头部与没写某个字段列的分段，这一列从 JSON 现取；写了的直接读。分段按写了哪些列分组，每组一个 read_parquet。
-func (sn *snapshot) source(project, logstore string, from, to int64, keys []string) string {
-	return sn.sourceOf(project, logstore, keys, func(g *segment) bool { return g.tmax >= from && g.tmin <= to })
+func (sn *snapshot) source(ctx context.Context, project, logstore string, from, to int64, keys []string) (string, error) {
+	return sn.sourceOf(ctx, project, logstore, keys, func(g *segment) bool { return g.tmax >= from && g.tmin <= to })
 }
 
 // hasSegments 判断 project/logstore 在 [from, to] 里有没有分段。
@@ -143,12 +145,12 @@ func (sn *snapshot) hasSegments(project, logstore string, from, to int64) bool {
 }
 
 // sourceSeq 与 source 相同，但按写入序号 [lo, hi] 选分段（上下文按 seq 找相邻的日志）。
-func (sn *snapshot) sourceSeq(project, logstore string, lo, hi int64) string {
-	return sn.sourceOf(project, logstore, nil, func(g *segment) bool { return g.seqMax >= lo && g.seqMin <= hi })
+func (sn *snapshot) sourceSeq(ctx context.Context, project, logstore string, lo, hi int64) (string, error) {
+	return sn.sourceOf(ctx, project, logstore, nil, func(g *segment) bool { return g.seqMax >= lo && g.seqMin <= hi })
 }
 
-// sourceOf 是 project/logstore 里 pick 选中的分段加上头部。
-func (sn *snapshot) sourceOf(project, logstore string, keys []string, pick func(*segment) bool) string {
+// sourceOf 是 project/logstore 里 pick 选中的分段加上头部。本地没有的分段先从对象存储下载。
+func (sn *snapshot) sourceOf(ctx context.Context, project, logstore string, keys []string, pick func(*segment) bool) (string, error) {
 	head := "logs"
 	if sn.boundary > 0 || len(keys) > 0 {
 		head = "SELECT " + baseCols + fieldCols(keys, nil) + " FROM logs"
@@ -167,15 +169,22 @@ func (sn *snapshot) sourceOf(project, logstore string, keys []string, pick func(
 		if g.project != project || g.logstore != logstore || !pick(g) {
 			continue
 		}
+		if err := sn.st.ensureLocal(ctx, g.path); err != nil {
+			return "", err
+		}
+		var cols map[string]bool
+		if len(keys) > 0 {
+			cols = sn.st.colsOf(g)
+		}
 		var sig strings.Builder // 只按 keys 里哪些写成了列分组
 		for _, k := range keys {
-			if g.cols[k] {
+			if cols[k] {
 				sig.WriteString(fieldcol.Name(k) + ",")
 			}
 		}
 		grp, ok := byCols[sig.String()]
 		if !ok {
-			grp = &group{have: g.cols}
+			grp = &group{have: cols}
 			byCols[sig.String()] = grp
 			groups = append(groups, grp)
 		}
@@ -183,9 +192,9 @@ func (sn *snapshot) sourceOf(project, logstore string, keys []string, pick func(
 	}
 	if len(groups) == 0 {
 		if head == "logs" {
-			return "logs"
+			return "logs", nil
 		}
-		return "(" + head + ") AS logs"
+		return "(" + head + ") AS logs", nil
 	}
 	if head == "logs" {
 		head = "SELECT " + baseCols + " FROM logs"
@@ -198,7 +207,7 @@ func (sn *snapshot) sourceOf(project, logstore string, keys []string, pick func(
 		parts = append(parts, "SELECT "+segCols+fieldCols(keys, grp.have)+" FROM read_parquet(["+
 			strings.Join(grp.paths, ", ")+"])")
 	}
-	return "(" + strings.Join(parts, " UNION ALL ") + ") AS logs"
+	return "(" + strings.Join(parts, " UNION ALL ") + ") AS logs", nil
 }
 
 // fieldCols 是 SELECT 里的字段列：have 里有的直接读，其余从 contents 现取。
@@ -296,6 +305,10 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	}
 	next := &snapshot{boundary: upper, segs: append(slices.Clone(cur.segs), added...)}
 	s.publish(next, func() { s.deleteHead(upper) })
+	s.markPending(added) // 提交之后才上传；失败的下次再传
+	if err := s.upload(ctx); err != nil && s.onError != nil {
+		s.onError(err)
+	}
 	return total, nil
 }
 
@@ -350,6 +363,9 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 		for i, g := range grp {
 			m.tmin, m.tmax, m.rows = min(m.tmin, g.tmin), max(m.tmax, g.tmax), m.rows+g.rows
 			paths[i] = sqlQuote(g.path)
+			if err := s.ensureLocal(ctx, g.path); err != nil { // 本地缓存可能已经淘汰
+				return merged, fmt.Errorf("compact segments: %w", err)
+			}
 		}
 		from := "read_parquet([" + strings.Join(paths, ", ") + "], union_by_name = true)"
 		if err := s.writeSegment(ctx, &m, hourOf(m), from); err != nil {
@@ -367,6 +383,13 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 		next.segs = append(next.segs, m)
 		s.publish(next, func() { s.removeSegments(grp) })
 		merged += len(grp)
+		if s.remote != nil {
+			s.markPending([]segment{m})
+			if err := s.upload(ctx); err != nil { // 合并后的没传上去之前，对象存储上的旧分段不删
+				return merged, err
+			}
+			s.trashRemote(grp)
+		}
 	}
 	return merged, nil
 }
@@ -412,7 +435,7 @@ func (s *Store) writeSegment(ctx context.Context, g *segment, hour int64, from s
 		return err
 	}
 	// bloom 先于分段文件就位：分段文件在，它的 bloom 就是完整的（没有 bloom 的分段只是不跳过）
-	if err := s.writeBloom(ctx, g.path+".bloom", from, g.project, g.logstore); err != nil {
+	if err := s.writeBloom(ctx, g.path+".bloom", from, g.project, g.logstore, g.cols); err != nil {
 		os.Remove(tmp)
 		return err
 	}
@@ -429,8 +452,8 @@ func (s *Store) writeSegment(ctx context.Context, g *segment, hour int64, from s
 var segmentFileRows int64 = 1_000_000
 
 // writeBloom 为 from（FROM 子句）选中的日志建 bloom：logstore 用到的每组分词符一个。
-func (s *Store) writeBloom(ctx context.Context, path, from, project, logstore string) error {
-	f := bloomFile{}
+func (s *Store) writeBloom(ctx context.Context, path, from, project, logstore string, cols map[string]bool) error {
+	f := &bloomFile{cols: cols, blooms: map[string]*bloom{}}
 	for _, sig := range s.tokenSigs(project, logstore) {
 		// 全文列（含 __source__、字段名、非数值字段的值）加上全部字段的值，按分词符切成整词，小写
 		rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT w FROM (SELECT unnest(string_split_regex(lower(
@@ -456,7 +479,7 @@ func (s *Store) writeBloom(ctx context.Context, path, from, project, logstore st
 		for _, w := range words {
 			b.add(w)
 		}
-		f[sig] = b
+		f.blooms[sig] = b
 	}
 	return writeBloomFile(path, f)
 }
@@ -547,6 +570,9 @@ func (s *Store) flusher(ctx context.Context, interval time.Duration) {
 		if _, err := s.Compact(ctx); err != nil && ctx.Err() == nil && s.onError != nil {
 			s.onError(err)
 		}
+		if err := s.maintainRemote(ctx); err != nil && ctx.Err() == nil && s.onError != nil {
+			s.onError(err)
+		}
 	}
 }
 
@@ -566,6 +592,9 @@ func (s *Store) maybeFlush(ctx context.Context, seq int64) {
 			s.onError(err)
 		}
 		if _, err := s.Compact(ctx); err != nil && s.onError != nil {
+			s.onError(err)
+		}
+		if err := s.maintainRemote(ctx); err != nil && s.onError != nil {
 			s.onError(err)
 		}
 		return
@@ -592,7 +621,30 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 			return nil, fmt.Errorf("flushed_seq %q: %w", v.String, err)
 		}
 	}
-	sn := &snapshot{boundary: boundary}
+	// 对象存储上的分段都是提交过的（先提交后上传）：本地库是新的（换了磁盘）时，边界与 seq 接着它们往下
+	var remote []segment
+	inRemote := map[string]bool{}
+	if s.remote != nil {
+		if remote, err = s.remoteSegments(ctx); err != nil {
+			return nil, err
+		}
+		created := map[[2]string]int64{}
+		for _, g := range remote {
+			boundary = max(boundary, g.seqMax)
+			inRemote[g.path] = true
+			k := [2]string{g.project, g.logstore}
+			if c, ok := created[k]; !ok || g.tmin < c {
+				created[k] = g.tmin
+			}
+		}
+		// logstore 的登记在本地库里：换了磁盘时按对象存储上的分段补上（创建时间取最早的日志）
+		for k, c := range created {
+			if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO logstores VALUES (?, ?, ?)`, k[0], k[1], c); err != nil {
+				return nil, err
+			}
+		}
+	}
+	sn := &snapshot{st: s, boundary: boundary}
 	if s.segDir == "" {
 		if boundary > 0 {
 			return nil, fmt.Errorf("the data file has logs in segments but no segment directory is configured")
@@ -622,9 +674,13 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 			}
 			return removeIfExists(path)
 		}
-		sn.segs = append(sn.segs, g)
+		if !inRemote[g.path] {
+			sn.segs = append(sn.segs, g)
+			s.markPending([]segment{g}) // 提交了还没上传
+		}
 		return nil
 	})
+	sn.segs = append(sn.segs, remote...)
 	if err != nil {
 		return nil, fmt.Errorf("load segments: %w", err)
 	}
@@ -639,52 +695,21 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 			if err := removeIfExists(g.path); err != nil {
 				return nil, err
 			}
+			if inRemote[g.path] {
+				s.trashRemote([]segment{g})
+			}
 			continue
 		}
 		kept = append(kept, g)
 	}
 	sn.segs = kept
 	slices.SortFunc(sn.segs, func(a, b segment) int { return cmp.Compare(a.seqMin, b.seqMin) })
-	if err := s.loadColumns(ctx, sn.segs); err != nil {
-		return nil, err
-	}
 	if boundary > 0 {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM logs WHERE seq <= ?`, boundary); err != nil {
 			return nil, err
 		}
 	}
 	return sn, nil
-}
-
-// loadColumns 从 Parquet 的 schema 读出各分段写成独立列的字段。
-func (s *Store) loadColumns(ctx context.Context, segs []segment) error {
-	if len(segs) == 0 {
-		return nil
-	}
-	idx := map[string]int{}
-	paths := make([]string, len(segs))
-	for i := range segs {
-		segs[i].cols = map[string]bool{}
-		idx[segs[i].path] = i
-		paths[i] = sqlQuote(segs[i].path)
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT file_name, name FROM parquet_schema([`+strings.Join(paths, ", ")+`])`)
-	if err != nil {
-		return fmt.Errorf("read segment schema: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var file, name string
-		if err := rows.Scan(&file, &name); err != nil {
-			return err
-		}
-		if k, ok := fieldcol.Key(name); ok {
-			if i, ok := idx[file]; ok {
-				segs[i].cols[k] = true
-			}
-		}
-	}
-	return rows.Err()
 }
 
 // removeIfExists 删除文件，文件已经不存在不算错。
@@ -743,6 +768,7 @@ func (s *Store) dropSegmentsBefore(cutoff int64) int64 {
 	if len(drop) == 0 {
 		return 0
 	}
+	s.trashRemote(drop)
 	s.publish(&snapshot{boundary: cur.boundary, segs: keep}, func() { s.removeSegments(drop) })
 	return n
 }
@@ -770,6 +796,23 @@ func (s *Store) unflush(ctx context.Context) error {
 	}
 	if busy { // 还有没做完的头部删除：读回的行可能被它删掉
 		return errors.New("segments are in use, try again when no queries are running")
+	}
+	if s.remote != nil {
+		// 全部下载到本地，再从对象存储删掉（在提交之前删：之后崩溃的话，本地的分段仍是提交过的，会重新上传；
+		// 反过来的话，对象存储上的分段会被当成提交过的，与读回头部的日志重复）
+		for _, g := range cur.segs {
+			if err := s.ensureLocal(ctx, g.path); err != nil {
+				return err
+			}
+		}
+		for _, g := range cur.segs {
+			for _, k := range []string{s.objectKey(g.path), s.objectKey(g.path + ".bloom")} {
+				if err := s.remote.obj.Delete(ctx, k); err != nil {
+					return err
+				}
+			}
+		}
+		s.markPending(nil)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

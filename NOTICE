@@ -30,6 +30,8 @@ into the binary are shipped in the image under /usr/share/doc/sls-local/licenses
   github.com/duckdb/duckdb-go/v2        MIT License, Copyright Marc Boeker and
                                         Stichting DuckDB Foundation (bundles DuckDB, MIT License)
   github.com/klauspost/compress         BSD 3-Clause License
+  github.com/minio/minio-go/v7          Apache License 2.0, Copyright 2014-2020 MinIO, Inc.
+                                        (S3-compatible object storage client)
   github.com/pierrec/lz4/v4             BSD 3-Clause License, Copyright (c) 2015 Pierre Curto
   sigs.k8s.io/yaml                      MIT License and BSD 3-Clause License
 

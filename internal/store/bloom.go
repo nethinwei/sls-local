@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"container/list"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -25,7 +26,8 @@ import (
 // 词的来源是全文列加上全部字段的值（数值字段的值不在全文列里，索引改过之后仍可能被字段检索匹配），所以字段
 // 检索与全文检索的词都一定在里面。bloom 只会误判「可能有」，不会误判「没有」。
 
-const bloomMagic = "SLSBLM1\n"
+// 旁路文件（<分段>.bloom）还记着分段写成独立列的字段：分段只在对象存储上、本地没有时也知道该读哪些列。
+const bloomMagic = "SLSBLM2\n"
 
 // bloomFalsePositive 是 bloom 误判「可能有」的概率：每个词约 9.6 bit。
 const bloomFalsePositive = 0.01
@@ -71,22 +73,36 @@ func (b *bloom) has(word string) bool {
 	return true
 }
 
-// bloomFile 是一个分段的全部 bloom：分词符签名 → bloom。
-type bloomFile map[string]*bloom
+// bloomFile 是一个分段的旁路文件：写成独立列的字段，与每组分词符（签名）的 bloom。
+type bloomFile struct {
+	cols   map[string]bool
+	blooms map[string]*bloom
+}
 
-func (f bloomFile) size() int {
+func (f *bloomFile) size() int {
+	if f == nil {
+		return 0
+	}
 	n := 0
-	for sig, b := range f {
+	for k := range f.cols {
+		n += len(k)
+	}
+	for sig, b := range f.blooms {
 		n += len(sig) + len(b.bits)
 	}
 	return n
 }
 
-func writeBloomFile(path string, f bloomFile) error {
+func writeBloomFile(path string, f *bloomFile) error {
 	var buf bytes.Buffer
 	buf.WriteString(bloomMagic)
-	buf.Write(binary.AppendUvarint(nil, uint64(len(f))))
-	for sig, b := range f {
+	buf.Write(binary.AppendUvarint(nil, uint64(len(f.cols))))
+	for k := range f.cols {
+		buf.Write(binary.AppendUvarint(nil, uint64(len(k))))
+		buf.WriteString(k)
+	}
+	buf.Write(binary.AppendUvarint(nil, uint64(len(f.blooms))))
+	for sig, b := range f.blooms {
 		buf.Write(binary.AppendUvarint(nil, uint64(len(sig))))
 		buf.WriteString(sig)
 		buf.Write(binary.AppendUvarint(nil, uint64(b.k)))
@@ -104,7 +120,7 @@ func writeBloomFile(path string, f bloomFile) error {
 	return os.Rename(tmp, path)
 }
 
-func readBloomFile(path string) (bloomFile, error) {
+func readBloomFile(path string) (*bloomFile, error) {
 	fh, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -115,11 +131,21 @@ func readBloomFile(path string) (bloomFile, error) {
 	if _, err := io.ReadFull(r, magic); err != nil || string(magic) != bloomMagic {
 		return nil, fmt.Errorf("%s: not a bloom file", path)
 	}
+	f := &bloomFile{cols: map[string]bool{}, blooms: map[string]*bloom{}}
 	n, err := binary.ReadUvarint(r)
 	if err != nil {
 		return nil, err
 	}
-	f := bloomFile{}
+	for range n {
+		k, err := readBytes(r)
+		if err != nil {
+			return nil, err
+		}
+		f.cols[string(k)] = true
+	}
+	if n, err = binary.ReadUvarint(r); err != nil {
+		return nil, err
+	}
 	for range n {
 		sig, err := readBytes(r)
 		if err != nil {
@@ -136,7 +162,7 @@ func readBloomFile(path string) (bloomFile, error) {
 		if k == 0 || k > 64 || len(bits) == 0 {
 			return nil, fmt.Errorf("%s: corrupt bloom", path)
 		}
-		f[string(sig)] = &bloom{k: uint32(k), bits: bits}
+		f.blooms[string(sig)] = &bloom{k: uint32(k), bits: bits}
 	}
 	return f, nil
 }
@@ -156,6 +182,7 @@ func readBytes(r *bufio.Reader) ([]byte, error) {
 
 // bloomCache 按分段路径缓存读进来的 bloom，总大小超过 limit 时淘汰最久没用的。
 type bloomCache struct {
+	fetch func(ctx context.Context, local string) error // 本地没有时从对象存储下载（可为空）
 	mu    sync.Mutex
 	limit int
 	size  int
@@ -165,7 +192,7 @@ type bloomCache struct {
 
 type bloomEntry struct {
 	path string
-	f    bloomFile // nil 表示没有 bloom 文件
+	f    *bloomFile // nil 表示没有旁路文件
 }
 
 // DefaultBloomCache 是 bloom 缓存的默认大小。
@@ -176,7 +203,7 @@ func newBloomCache(limit int) *bloomCache {
 }
 
 // get 返回分段的 bloom；没有 bloom 文件时为 nil。
-func (c *bloomCache) get(segPath string) (bloomFile, error) {
+func (c *bloomCache) get(segPath string) (*bloomFile, error) {
 	c.mu.Lock()
 	if e, ok := c.byKey[segPath]; ok {
 		c.lru.MoveToFront(e)
@@ -185,6 +212,11 @@ func (c *bloomCache) get(segPath string) (bloomFile, error) {
 		return f, nil
 	}
 	c.mu.Unlock()
+	if c.fetch != nil {
+		if err := c.fetch(context.Background(), segPath+".bloom"); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
 	f, err := readBloomFile(segPath + ".bloom")
 	if errors.Is(err, os.ErrNotExist) {
 		f, err = nil, nil
@@ -235,7 +267,22 @@ func (s *Store) mayContain(g *segment, need *query.Need) bool {
 		return true
 	}
 	return need.Eval(func(sig, word string) bool {
-		b, ok := f[sig]
+		b, ok := f.blooms[sig]
 		return !ok || b.has(word)
 	})
+}
+
+// colsOf 是分段写成独立列的字段：刚写的分段带着，其余从旁路文件读（读不到时为空，字段全从 JSON 取）。
+func (s *Store) colsOf(g *segment) map[string]bool {
+	if g.cols != nil {
+		return g.cols
+	}
+	f, err := s.blooms.get(g.path)
+	if err != nil || f == nil {
+		if err != nil && s.onError != nil {
+			s.onError(fmt.Errorf("read segment sidecar: %w", err))
+		}
+		return nil
+	}
+	return f.cols
 }

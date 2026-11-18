@@ -38,8 +38,8 @@ type SearchResult struct {
 
 // source 是检索范围（project、logstore、时间）在快照里的数据，作为 FROM 后面的表，带上 extra 与检索条件、
 // SPL 用到的字段列。按 bloom 跳过不可能满足检索条件的分段。
-func (s *Store) source(sn *snapshot, p *SearchParams, extra ...string) string {
-	return sn.sourceOf(p.Project, p.Logstore, p.keys(extra...), func(g *segment) bool {
+func (s *Store) source(ctx context.Context, sn *snapshot, p *SearchParams, extra ...string) (string, error) {
+	return sn.sourceOf(ctx, p.Project, p.Logstore, p.keys(extra...), func(g *segment) bool {
 		return g.tmax >= p.From && g.tmin <= p.To && s.mayContain(g, p.Where.Need)
 	})
 }
@@ -92,7 +92,11 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	for _, k := range p.keys() { // SPL 的 where、extend 引用字段列
 		fields += ", " + fieldcol.Ref(k)
 	}
-	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys`+fields+` FROM `+s.source(sn, &p)+` WHERE `+where+
+	from, err := s.source(ctx, sn, &p)
+	if err != nil {
+		return nil, err
+	}
+	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys`+fields+` FROM `+from+` WHERE `+where+
 		` AND t BETWEEN ? AND ?`, p.Stages)
 	extCols := ""
 	for _, c := range ext {
@@ -236,8 +240,12 @@ func (s *Store) scanLate(ctx context.Context, tx *sql.Tx, sn *snapshot, p Search
 	for i, seq := range seqs {
 		list[i] = strconv.FormatInt(seq, 10)
 	}
+	from, err := sn.source(ctx, p.Project, p.Logstore, tlo, thi, nil)
+	if err != nil {
+		return 0, err
+	}
 	rows, err = tx.QueryContext(ctx, `SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0), orig_keys
-		FROM `+sn.source(p.Project, p.Logstore, tlo, thi, nil)+`
+		FROM `+from+`
 		WHERE project = ? AND logstore = ? AND t BETWEEN ? AND ? AND seq IN (`+strings.Join(list, ", ")+`)`,
 		p.Project, p.Logstore, tlo, thi)
 	if err != nil {
@@ -276,7 +284,11 @@ func (s *Store) Count(ctx context.Context, p SearchParams) (int64, error) {
 	defer s.release(sn)
 	where, args := p.where()
 	var n int64
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+s.source(sn, &p)+` WHERE `+where, args...).Scan(&n); err != nil {
+	from, err := s.source(ctx, sn, &p)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+from+` WHERE `+where, args...).Scan(&n); err != nil {
 		return 0, queryError(err)
 	}
 	return n, nil
@@ -461,7 +473,10 @@ func EncodeCursor(seq int64) string {
 func (s *Store) Cursor(ctx context.Context, project, logstore, from string) (int64, error) {
 	sn := s.acquire()
 	defer s.release(sn)
-	logs := sn.source(project, logstore, 0, math.MaxInt64, nil)
+	logs, err := sn.source(ctx, project, logstore, 0, math.MaxInt64, nil)
+	if err != nil {
+		return 0, err
+	}
 	var q string
 	var args []any
 	switch from {
@@ -483,7 +498,7 @@ func (s *Store) Cursor(ctx context.Context, project, logstore, from string) (int
 		return seq, err
 	}
 	var seq int64
-	err := s.db.QueryRowContext(ctx, q, project, logstore).Scan(&seq)
+	err = s.db.QueryRowContext(ctx, q, project, logstore).Scan(&seq)
 	return seq, err
 }
 
@@ -553,7 +568,11 @@ func (s *Store) Context(ctx context.Context, project, logstore string, seq int64
 	sn := s.acquire()
 	defer s.release(sn)
 	var packCtx sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT pack_ctx FROM `+sn.sourceSeq(project, logstore, seq, seq)+
+	anchor, err := sn.sourceSeq(ctx, project, logstore, seq, seq)
+	if err != nil {
+		return nil, err
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT pack_ctx FROM `+anchor+
 		` WHERE project = ? AND logstore = ? AND seq = ?`, project, logstore, seq).Scan(&packCtx)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !packCtx.Valid) {
 		return nil, ErrNoContext
@@ -570,10 +589,13 @@ func (s *Store) Context(ctx context.Context, project, logstore string, seq int64
 			if w == math.MaxInt64 {
 				l, h = lo, hi
 			}
+			from, err := sn.sourceSeq(ctx, project, logstore, l, h)
+			if err != nil {
+				return nil, err
+			}
 			q := `SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0) FROM ` +
-				sn.sourceSeq(project, logstore, l, h) + ` WHERE project = ? AND logstore = ? AND pack_ctx = ?
+				from + ` WHERE project = ? AND logstore = ? AND pack_ctx = ?
 				AND seq BETWEEN ? AND ? ORDER BY seq ` + order + ` LIMIT ?`
-			var err error
 			if out, err = s.scanRows(ctx, q, project, logstore, packCtx.String, l, h, limit); err != nil {
 				return nil, err
 			}
@@ -626,7 +648,11 @@ func (s *Store) Histogram(ctx context.Context, project, logstore string, from, t
 	sn := s.acquire()
 	defer s.release(sn)
 	hp := SearchParams{Project: project, Logstore: logstore, From: from, To: to, Where: where}
-	q := `SELECT t - t % ? AS b, count(*) FROM ` + s.source(sn, &hp) +
+	src, err := s.source(ctx, sn, &hp)
+	if err != nil {
+		return nil, err
+	}
+	q := `SELECT t - t % ? AS b, count(*) FROM ` + src +
 		` WHERE project = ? AND logstore = ? AND t >= ? AND t < ? AND ` +
 		where.SQL + ` GROUP BY b`
 	args := append([]any{interval, project, logstore, from, to}, where.Args...)
@@ -652,7 +678,10 @@ func (s *Store) Histogram(ctx context.Context, project, logstore string, from, t
 func (s *Store) FieldNames(ctx context.Context, project, logstore string, since int64) ([]string, error) {
 	sn := s.acquire()
 	defer s.release(sn)
-	logs := sn.source(project, logstore, since, math.MaxInt64, nil)
+	logs, err := sn.source(ctx, project, logstore, since, math.MaxInt64, nil)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT unnest(json_keys(contents)) FROM `+logs+` WHERE project = ? AND logstore = ? AND t >= ?
 		UNION SELECT DISTINCT unnest(json_keys(tags)) FROM `+logs+` WHERE project = ? AND logstore = ? AND t >= ?`,

@@ -88,6 +88,8 @@ type Store struct {
 	flushRows   int64
 	syncFlush   bool       // 测试用：行数到了就在 Append 里同步刷段
 	tempSegDir  string     // 测试用的临时分段目录，Close 时删除
+	tempRemote  string     // 测试用的临时对象存储目录，Close 时删除
+	testRemote  bool       // 测试：分段放在对象存储上，本地缓存立即淘汰
 	flushMu     sync.Mutex // 刷段、保留、读回分段互斥
 	segMu       sync.Mutex // 保护 cur、live、cleanups
 	cur         *snapshot
@@ -98,6 +100,7 @@ type Store struct {
 	flusherDone chan struct{}
 	onError     func(error)
 	blooms      *bloomCache
+	remote      *remoteState                                            // 分段放在对象存储上时（见 remote.go）
 	sigs        atomic.Pointer[func(project, logstore string) []string] // 见 SetTokenSigs
 }
 
@@ -131,6 +134,10 @@ type Options struct {
 	OnError func(error)
 	// BloomCache 是分段 bloom 的内存缓存上限（字节），为 0 时用默认值。
 	BloomCache int
+	// Storage 是放分段的对象存储（file:///path 或 s3://bucket/prefix，见 OpenObjects）；为空时分段只在
+	// SegmentDir。设置时 SegmentDir 是本地缓存，CacheSize 是它的上限（字节，0 表示不限）。
+	Storage   string
+	CacheSize int64
 }
 
 // DefaultSQLOffset 是 SLS 的默认时区 UTC+8。
@@ -167,6 +174,23 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 	if err := s.initSegments(&opts); err != nil {
 		db.Close()
 		return nil, err
+	}
+	if opts.Storage != "" {
+		if s.segDir == "" {
+			db.Close()
+			return nil, errors.New("object storage needs a segment directory for the local cache")
+		}
+		obj, err := OpenObjects(opts.Storage)
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		s.remote = &remoteState{obj: obj, limit: opts.CacheSize, grace: remoteGrace, pending: map[string]bool{},
+			lastUse: map[string]time.Time{}, fetching: map[string]*fetchCall{}}
+		s.blooms.fetch = s.ensureLocal
+		if s.testRemote { // 测试：每次刷段后把本地缓存全部淘汰，查询都从对象存储下载
+			s.remote.grace = 0
+		}
 	}
 	if _, err := db.ExecContext(ctx, lockDown(s.segDir)); err != nil {
 		db.Close()
@@ -220,6 +244,20 @@ func (s *Store) initSegments(opts *Options) error {
 			s.onError = func(err error) { panic(err) }
 		}
 	}
+	// SLS_LOCAL_TEST_REMOTE=1（临时目录）或 s3://bucket/prefix（每个 Store 用一个新的子前缀）：分段放进对象存储，
+	// 本地缓存每次刷段后全部淘汰，查询都从对象存储下载
+	if v := os.Getenv("SLS_LOCAL_TEST_REMOTE"); v != "" && opts.Storage == "" && s.tempSegDir != "" {
+		if strings.HasPrefix(v, "s3://") {
+			opts.Storage = strings.TrimSuffix(v, "/") + "/" + filepath.Base(s.tempSegDir)
+		} else {
+			dir, err := os.MkdirTemp("", "sls-remote-")
+			if err != nil {
+				return err
+			}
+			opts.Storage, s.tempRemote = "file://"+dir, dir
+		}
+		opts.CacheSize, s.testRemote = 1, true
+	}
 	if opts.SegmentDir == "" {
 		return nil
 	}
@@ -255,8 +293,13 @@ func (s *Store) RebuildFulltext(ctx context.Context, numeric func(project, logst
 	}
 	s.flushMu.Lock() // 重建期间不刷段
 	defer s.flushMu.Unlock()
-	if err := s.unflush(ctx); err != nil { // 分段里的日志读回头部一起重建，之后再刷出去
-		return 0, err
+	// 升级时只重建头部：分段是 v0.3 起才有的，写的就是当前规则（以后改规则时要另外处理分段）。尤其不能在
+	// 这里读回分段：本地库是新的（换了磁盘）时没有版本记录，读回会把对象存储上的分段全部删掉。
+	// -reindex（force）按新的索引配置重建全部日志，分段读回头部一起重建，之后再刷出去。
+	if force {
+		if err := s.unflush(ctx); err != nil {
+			return 0, err
+		}
 	}
 	s.mu.Lock() // 重建期间不接受写入
 	defer s.mu.Unlock()
@@ -315,6 +358,9 @@ func (s *Store) Close() error {
 	}
 	if s.tempSegDir != "" {
 		defer os.RemoveAll(s.tempSegDir)
+	}
+	if s.tempRemote != "" {
+		defer os.RemoveAll(s.tempRemote)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

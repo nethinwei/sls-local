@@ -40,6 +40,7 @@ func newTestEnv(t *testing.T) *sls.Client {
 		t.Fatal(err)
 	}
 	h := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), map[string]*sls.Index{"devproj/devstore": &devIndex})
+	h.now = func() time.Time { return base.Add(time.Hour) } // 测试数据在 base 附近：自动索引只看最近一天写入的字段
 	srv := httptest.NewServer(h.Handler())
 	t.Cleanup(srv.Close)
 	addr := srv.Listener.Addr().String()

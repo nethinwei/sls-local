@@ -9,6 +9,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 
+	"github.com/nethinwei/sls-local/internal/fieldcol"
 	"github.com/nethinwei/sls-local/internal/presto/parser"
 )
 
@@ -533,12 +534,12 @@ func (t *tr) logField(name string) (val, bool) {
 		dt, _ := duckType(typ)
 		return val{"CAST(NULL AS " + dt + ")", typ}, true
 	}
-	col := ColContents
-	if strings.HasPrefix(f.Name, "__tag__:") {
-		col = ColTags
-	}
+	// 存储层提供的字段列（fieldcol），CTE 里原样带出；tag 仍从 JSON 取。
 	// JSON 路径内联成字符串字面量而不是参数：同一字段在 select 与 group by 里必须写成同一个表达式
-	expr := "json_extract_string(" + col + ", " + sqlString(jsonPath(f.Name)) + ")"
+	expr := fieldcol.Ref(f.Name)
+	if strings.HasPrefix(f.Name, "__tag__:") {
+		expr = "json_extract_string(" + ColTags + ", " + sqlString(jsonPath(f.Name)) + ")"
+	}
 	if len(path) > 0 {
 		// 字段值不一定是合法的 JSON（SLS 取不到子键时是 null）
 		p := "$"

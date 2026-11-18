@@ -36,6 +36,10 @@ jobs:
       - name: go test
         run: go test -race ./...
 
+      # 同一套测试，但头部每满 3 行就刷成 Parquet 分段：数据一部分在头部、一部分在分段
+      - name: go test (segments)
+        run: SLS_LOCAL_TEST_FLUSH_ROWS=3 go test -race ./...
+
       - name: Every dependency has a license file
         run: scripts/collect-go-licenses.sh "$RUNNER_TEMP/licenses"
 

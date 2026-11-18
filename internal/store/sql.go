@@ -28,15 +28,18 @@ type SQLResult struct {
 
 // RunSQL 在 p 限定的日志（project、时间范围、检索条件）上执行改写好的 SQL。
 func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt) (*SQLResult, error) {
+	sn := s.acquire()
+	defer s.release(sn)
 	base, baseArgs := p.where()
+	keys := p.keys(stmt.SQL, stmt.Processed) // 检索条件与语句用到的字段列
 	// log 与 compare 用的 log__shift_<n>（时间范围往前平移 n 秒，检索条件相同）
-	defs := []string{query.CTEDef("log", base)}
+	defs := []string{query.CTEDef("log", p.source(sn, stmt.SQL, stmt.Processed), base, keys)}
 	cteArgs := append([]any{}, baseArgs...)
 	for _, n := range stmt.Shifts {
 		sp := p
 		sp.From, sp.To = p.From-n, p.To-n
 		b, a := sp.where()
-		defs = append(defs, query.CTEDef(presto.ShiftTable(n), b))
+		defs = append(defs, query.CTEDef(presto.ShiftTable(n), sp.source(sn, stmt.SQL, stmt.Processed), b, keys))
 		cteArgs = append(cteArgs, a...)
 	}
 	with := "WITH " + strings.Join(defs, ", ") + " "
@@ -52,7 +55,7 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 		if stmt.Processed != "" {
 			err = s.db.QueryRowContext(ctx, with+"SELECT "+stmt.Processed, append(cteArgs, stmt.Args...)...).Scan(&res.Processed)
 		} else {
-			err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+base, baseArgs...).Scan(&res.Processed)
+			err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+p.source(sn)+` WHERE `+base, baseArgs...).Scan(&res.Processed)
 		}
 		processed <- err
 	}()

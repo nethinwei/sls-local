@@ -74,7 +74,7 @@ func TestTranslate(t *testing.T) {
 		{" with t as (select 1 as a from log) select a from t", `WITH "t" AS (SELECT * FROM (SELECT 1 AS "a" FROM log) AS __sls_cte("a")) SELECT "t"."a" AS "a" FROM "t" AS "t" LIMIT 100`},
 		// SLS 只给第一个 select 补 from 子句（insertedSQL 只有一处）
 		{" select 1 as a union all select 2 as a", `(SELECT 1 AS "a" FROM log) UNION ALL (SELECT 2 AS "a") LIMIT 100`},
-		{" select count(*) as c group by level order by c desc limit 5", `SELECT count(*) AS "c" FROM log GROUP BY json_extract_string(__sls_contents, '$."level"') ORDER BY "c" DESC NULLS LAST LIMIT 5`},
+		{" select count(*) as c group by level order by c desc limit 5", `SELECT count(*) AS "c" FROM log GROUP BY "__f_6c6576656c" ORDER BY "c" DESC NULLS LAST LIMIT 5`},
 		// 原文里有 from（extract 里的）时 SLS 不补 from 子句：只算一次
 		{" select extract(hour from from_unixtime(0)) as h", `SELECT extract(hour FROM sls_from_unixtime(0)) AS "h" LIMIT 100`},
 	}

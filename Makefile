@@ -2,16 +2,19 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 IMAGE   ?= sls-local
 
-.PHONY: help build test golden lint run image image-multi licenses clean
+.PHONY: help build test test-segments golden lint run image image-multi licenses clean
 
 help: ## 显示帮助
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
 
 build: ## 编译到 bin/sls-local（需要 cgo）
 	go build -trimpath -ldflags "-X main.version=$(VERSION)" -o bin/sls-local ./cmd/sls-local
 
 test: ## 运行全部测试（含竞态检测）
 	go test -race ./...
+
+test-segments: ## 同一套测试，头部每满 3 行就刷成 Parquet 分段
+	SLS_LOCAL_TEST_FLUSH_ROWS=3 go test -race ./...
 
 golden: ## 只跑与真实 SLS 的对照测试（docs/golden.md）
 	go test ./internal/golden -run TestGolden -v -count=1 | grep -E '^(---|===|ok|FAIL)|cases match' | grep -v '^=== RUN' | tail -40

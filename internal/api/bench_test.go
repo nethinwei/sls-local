@@ -10,8 +10,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +25,8 @@ import (
 )
 
 // 基准测试：go test ./internal/api -run '^$' -bench . -benchtime 20x
-// 数据量用 SLS_BENCH_N 调整（默认 20 万条，分布在 2 小时内）。
+// 数据量用 SLS_BENCH_N 调整（默认 20 万条，分布在 2 小时内）；SLS_BENCH_DISK=1 时数据落盘（临时目录，
+// 结束后删除），否则用内存库；SLS_BENCH_SEGMENTS=1 时（需同时落盘）装载完把全部数据刷成 Parquet 分段。
 
 var (
 	benchOnce   sync.Once
@@ -30,7 +34,32 @@ var (
 	benchStore  *store.Store
 	benchFrom   int64
 	benchTo     int64
+	benchDir    string // 落盘模式的临时目录
 )
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if benchStore != nil {
+		benchStore.Close()
+	}
+	if benchDir != "" {
+		os.RemoveAll(benchDir)
+	}
+	os.Exit(code)
+}
+
+// benchPath 是基准用的数据文件：SLS_BENCH_DISK=1 时在临时目录里，否则为空（内存库）。
+func benchPath(b *testing.B) string {
+	if os.Getenv("SLS_BENCH_DISK") != "1" {
+		return ""
+	}
+	dir, err := os.MkdirTemp("", "sls-bench-")
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchDir = dir
+	return filepath.Join(dir, "sls.duckdb")
+}
 
 func benchIndex() *sls.Index {
 	text := func() sls.IndexKey {
@@ -77,7 +106,12 @@ func benchN() int {
 
 func benchEnv(b *testing.B) *sls.Client {
 	benchOnce.Do(func() {
-		st, err := store.Open(context.Background(), "", store.Options{SQLOffset: store.DefaultSQLOffset})
+		opts := store.Options{SQLOffset: store.DefaultSQLOffset, FlushRows: 1 << 40, FlushInterval: 24 * time.Hour}
+		path := benchPath(b)
+		if path != "" && os.Getenv("SLS_BENCH_SEGMENTS") == "1" {
+			opts.SegmentDir = filepath.Join(benchDir, "segments")
+		}
+		st, err := store.Open(context.Background(), path, opts)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -100,6 +134,22 @@ func benchEnv(b *testing.B) *sls.Client {
 			}
 		}
 		b.Logf("loaded %d logs in %v", benchN(), time.Since(start))
+		if opts.SegmentDir != "" {
+			start = time.Now()
+			if _, err := st.Flush(context.Background()); err != nil {
+				b.Fatal(err)
+			}
+			var size int64
+			filepath.WalkDir(opts.SegmentDir, func(_ string, d os.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					if fi, err := d.Info(); err == nil {
+						size += fi.Size()
+					}
+				}
+				return nil
+			})
+			b.Logf("flushed to segments in %v, %.1f MB", time.Since(start), float64(size)/1e6)
+		}
 		benchClient, benchStore = c, st
 	})
 	return benchClient
@@ -190,4 +240,42 @@ func BenchmarkStoreSearchStar(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// BenchmarkConcurrentMixed 模拟看板刷新：多个 goroutine 同时发检索、直方图与 SQL（GOMAXPROCS 个并发，
+// 用 -cpu 调整），看并发下的吞吐。
+func BenchmarkConcurrentMixed(b *testing.B) {
+	c := benchEnv(b)
+	queries := []string{
+		"*",
+		"level: ERROR",
+		"timeout",
+		"* | select service, level, count(*) as c group by service, level",
+		"* | select __time__ - __time__ % 60 as t, count(*) as c group by t order by t limit 1000",
+		"* | select approx_percentile(latency_ms, 0.99) as p",
+	}
+	var next atomic.Int64
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			i := next.Add(1)
+			if i%(int64(len(queries))+1) == 0 {
+				if _, err := c.GetHistograms("bench", "app", "", benchFrom, benchTo, "level: ERROR"); err != nil {
+					b.Error(err)
+					return
+				}
+				continue
+			}
+			q := queries[i%int64(len(queries)+1)-1]
+			lines := int64(100)
+			if strings.Contains(q, "select") {
+				lines = 0
+			}
+			if _, err := c.GetLogsV3("bench", "app", &sls.GetLogRequest{From: benchFrom, To: benchTo, Query: q, Lines: lines, Reverse: true}); err != nil {
+				b.Error(err)
+				return
+			}
+		}
+	})
+	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "queries/s")
 }

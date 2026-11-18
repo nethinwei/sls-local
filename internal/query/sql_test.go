@@ -5,12 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nethinwei/sls-local/internal/fieldcol"
 	"github.com/nethinwei/sls-local/internal/index"
 )
 
 func TestTranslateSQL(t *testing.T) {
 	ix := devIndex(t)
-	str := func(n string) string { return "json_extract_string(" + colContents + `, '$."` + n + `"')` }
+	str := fieldcol.Ref // 字段列（存储层提供，CTE 里原样带出）
 	long := "TRY_CAST(" + str("cost_ms") + " AS BIGINT)"
 	cases := []struct{ in, want string }{
 		// 没写 FROM、LIMIT：补上 FROM log 与 LIMIT 100；没有别名的列补列名

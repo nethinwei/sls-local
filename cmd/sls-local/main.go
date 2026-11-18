@@ -13,7 +13,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -28,6 +30,9 @@ import (
 
 // version 由构建时的 -ldflags "-X main.version=..." 写入。
 var version = "dev"
+
+// backgroundErrors 数后台工作（刷段、合并、上传、刷新）的错误。
+var backgroundErrors atomic.Int64
 
 type logstores []string
 
@@ -45,6 +50,14 @@ func main() {
 		storage   = flag.String("storage", "", "放分段的对象存储：file:///path 或 s3://bucket/prefix（S3 端点与凭证见 SLS_S3_ENDPOINT、"+
 			"AWS_ACCESS_KEY_ID、AWS_SECRET_ACCESS_KEY）。设置时 -segments 是本地缓存")
 		cacheSize = flag.Int64("cache-size", 50<<30, "使用对象存储时本地缓存的上限（字节）；0 表示不限")
+		target    = flag.String("target", "all", "节点角色：all 写入与查询都做（单机）；write 只接受写入，把分段写进对象存储；"+
+			"read 只做查询，读对象存储上全部写入节点的分段（看到的数据比写入晚一个刷段间隔）。write、read 需要 -storage")
+		writerID  = flag.Int64("writer-id", 0, "写入节点的编号：共用一个对象存储的写入节点各不相同（如 StatefulSet 的序号）")
+		refresh   = flag.Duration("refresh-interval", store.DefaultRefreshInterval, "查询节点重新列出对象存储上分段的间隔")
+		memLimit  = flag.String("memory-limit", "", "DuckDB 的内存上限，如 8GB；默认物理内存的 80%（容器里应设成低于容器内存上限）")
+		qTimeout  = flag.Duration("query-timeout", time.Minute, "一次查询（检索、SQL、直方图、上下文）的最长执行时间；0 表示不限")
+		maxQ      = flag.Int("max-queries", 0, "同时执行的查询数上限，超过的排队 5 秒，仍拿不到返回 ReadQuotaExceed；0 表示 CPU 数的 2 倍")
+		writeRate = flag.Float64("write-rate", 0, "每个 logstore 每秒最多写入的日志条数（允许 2 秒的突发），超过返回 WriteQuotaExceed；0 表示不限")
 		ttl       = flag.Duration("ttl", 72*time.Hour, "日志保留时长，按 __time__ 删除；0 表示不删除")
 		cfgPath   = flag.String("config", "", "配置文件（YAML）：预建 logstore 并声明索引，格式见 internal/config")
 		sqlOffset = flag.Duration("sql-utc-offset", store.DefaultSQLOffset, "SQL 时间函数（from_unixtime、date_format、now）使用的时区偏移，SLS 默认东八区")
@@ -62,10 +75,14 @@ func main() {
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	opts := store.Options{SQLOffset: *sqlOffset, SegmentDir: *segDir, FlushInterval: *flushInt, FlushRows: *flushRows,
-		Storage: *storage, CacheSize: *cacheSize,
-		OnError: func(err error) { log.Warn("segments", "error", err) }}
+		Storage: *storage, CacheSize: *cacheSize, WriterID: *writerID, RefreshInterval: *refresh, MemoryLimit: *memLimit,
+		OnError: func(err error) { backgroundErrors.Add(1); log.Warn("segments", "error", err) }}
 	if opts.SegmentDir == "" && *dataPath != "" {
 		opts.SegmentDir = filepath.Join(filepath.Dir(*dataPath), "segments")
+	}
+	if err := applyTarget(*target, &opts, dataPath, *reindex); err != nil {
+		fmt.Fprintln(os.Stderr, "sls-local:", err)
+		os.Exit(2)
 	}
 	if *reindex {
 		if err := runReindex(log, *dataPath, *cfgPath, opts); err != nil {
@@ -74,13 +91,49 @@ func main() {
 		}
 		return
 	}
-	if err := run(log, *httpAddr, *httpsAddr, *dataPath, *cfgPath, *ttl, opts, stores); err != nil {
+	limits := api.Limits{QueryTimeout: *qTimeout, MaxQueries: *maxQ, WriteRate: *writeRate}
+	if limits.MaxQueries == 0 {
+		limits.MaxQueries = 2 * runtime.NumCPU()
+	}
+	if err := run(log, *httpAddr, *httpsAddr, *dataPath, *cfgPath, *target, *ttl, opts, limits, stores); err != nil {
 		log.Error("sls-local exited", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl time.Duration, opts store.Options, stores []string) error {
+// applyTarget 按节点角色检查、调整参数。
+func applyTarget(target string, opts *store.Options, dataPath *string, reindex bool) error {
+	switch target {
+	case "all":
+		return nil
+	case "write", "read":
+	default:
+		return fmt.Errorf("-target %q: want all, write or read", target)
+	}
+	if opts.Storage == "" {
+		return fmt.Errorf("-target=%s needs -storage (object storage shared by all nodes)", target)
+	}
+	if opts.SegmentDir == "" {
+		return fmt.Errorf("-target=%s needs -segments (local cache) or -data", target)
+	}
+	if target == "write" {
+		explicit := false
+		flag.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "flush-interval" })
+		if !explicit { // 查询节点看到的数据比写入晚一个刷段间隔
+			opts.FlushInterval = 10 * time.Second
+		}
+		return nil
+	}
+	if reindex {
+		return errors.New("-reindex runs on a write node")
+	}
+	opts.ReadOnly = true
+	*dataPath = "" // 查询节点没有自己的数据：内存库，-data 只用来定缓存目录
+	return nil
+}
+
+func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath, target string, ttl time.Duration, opts store.Options,
+	limits api.Limits, stores []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -112,6 +165,15 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl ti
 	}
 
 	srv := api.New(st, log, indexes)
+	srv.Target = target
+	keys, err := accessKeys(cfgPath)
+	if err != nil {
+		return err
+	}
+	srv.SetAccessKeys(keys)
+	srv.SetLimits(limits)
+	srv.Metrics.Func("sls_local_background_errors_total", "Errors of background work (flush, compaction, upload, refresh).",
+		"counter", func() float64 { return float64(backgroundErrors.Load()) })
 	if ttl > 0 { // GetLogStore、GetIndex 展示的保留天数
 		srv.TTLDays = int((ttl + 24*time.Hour - 1) / (24 * time.Hour))
 	} else {
@@ -144,11 +206,13 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl ti
 		}()
 	}
 	log.Info("sls-local started", "version", version, "http", httpAddr, "https", httpsAddr, "data", dataPath,
-		"segments", opts.SegmentDir, "storage", opts.Storage, "ttl", ttl.String(),
-		"config", cfgPath, "indexed_logstores", len(indexes))
+		"segments", opts.SegmentDir, "storage", opts.Storage, "target", target, "writer_id", opts.WriterID, "ttl", ttl.String(),
+		"config", cfgPath, "indexed_logstores", len(indexes), "access_keys", len(keys))
 
 	if ttl > 0 {
-		go retain(ctx, log, st, ttl)
+		if !opts.ReadOnly { // 过期的分段由写入它的节点删
+			go retain(ctx, log, st, ttl)
+		}
 	}
 
 	select {
@@ -159,6 +223,16 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl ti
 	defer cancel()
 	for _, srv := range servers {
 		_ = srv.Shutdown(shutdown)
+	}
+	// 用对象存储时，退出前把头部刷出去：不然查询节点要等这个节点重启后才看得到这些日志
+	if opts.Storage != "" && !opts.ReadOnly {
+		flush, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if n, ferr := st.Flush(flush); ferr != nil {
+			log.Warn("flush before exit failed", "error", ferr)
+		} else if n > 0 {
+			log.Info("flushed before exit", "rows", n)
+		}
 	}
 	return err
 }
@@ -184,15 +258,35 @@ func retain(ctx context.Context, log *slog.Logger, st *store.Store, ttl time.Dur
 
 // loadIndexes 读配置文件里的索引声明，返回 project/logstore → 索引，以及配置里的全部 logstore。
 func loadIndexes(cfgPath string) (map[string]*sls.Index, []string, error) {
-	indexes := map[string]*sls.Index{}
-	var stores []string
 	if cfgPath == "" {
-		return indexes, nil, nil
+		return map[string]*sls.Index{}, nil, nil
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return nil, nil, err
 	}
+	return indexesOf(cfg)
+}
+
+// accessKeys 读配置文件里的 AccessKey（id → secret）；没有配置时为空（不校验签名）。
+func accessKeys(cfgPath string) (map[string]string, error) {
+	keys := map[string]string{}
+	if cfgPath == "" {
+		return keys, nil
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range cfg.AccessKeys {
+		keys[k.ID] = k.Secret
+	}
+	return keys, nil
+}
+
+func indexesOf(cfg *config.Config) (map[string]*sls.Index, []string, error) {
+	indexes := map[string]*sls.Index{}
+	var stores []string
 	for _, l := range cfg.Logstores {
 		stores = append(stores, l.Project+"/"+l.Logstore)
 		if l.Index != nil {

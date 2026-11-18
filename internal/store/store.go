@@ -148,6 +148,11 @@ CREATE OR REPLACE TEMP MACRO sls_utc(ts) AS ts - to_seconds(` + off + `);`
 
 // Open 打开（或创建）path 上的数据库。path 为空时使用内存库（测试用）。
 func Open(ctx context.Context, path string, opts Options) (*Store, error) {
+	if path != "" { // DuckDB 不建目录
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, fmt.Errorf("data directory: %w", err)
+		}
+	}
 	init := macros(int64(opts.SQLOffset / time.Second))
 	connector, err := duckdb.NewConnector(path+dsnOptions, func(ex driver.ExecerContext) error {
 		_, err := ex.ExecContext(context.Background(), init, nil)
@@ -211,6 +216,9 @@ func (s *Store) initSegments(opts *Options) error {
 			return err
 		}
 		opts.SegmentDir, s.flushRows, s.syncFlush, s.tempSegDir = dir, n, true, dir
+		if s.onError == nil { // 测试里刷段、合并出错不能悄悄过去
+			s.onError = func(err error) { panic(err) }
+		}
 	}
 	if opts.SegmentDir == "" {
 		return nil

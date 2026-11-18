@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -34,10 +35,29 @@ type Server struct {
 // New 创建处理器。indexes 是配置文件里声明了索引的 logstore（键为 project/logstore）。
 func New(st *store.Store, log *slog.Logger, indexes map[string]*sls.Index) *Server {
 	s := &Server{store: st, log: log, now: time.Now, indexes: map[string]*index.Index{}, TTLDays: 3}
+	sigs := map[string][]string{} // project/logstore → 分段 bloom 用的分词符组
 	for k, raw := range indexes {
 		s.indexes[k] = index.FromConfig(raw)
+		sigs[k] = tokenSigs(s.indexes[k])
 	}
+	auto := tokenSigs(index.Auto())
+	st.SetTokenSigs(func(project, logstore string) []string {
+		if v, ok := sigs[project+"/"+logstore]; ok {
+			return v
+		}
+		return auto
+	})
 	return s
+}
+
+func tokenSigs(ix *index.Index) []string {
+	var out []string
+	for _, t := range ix.TokenSets() {
+		if sig := query.TokenSig(t); !slices.Contains(out, sig) {
+			out = append(out, sig)
+		}
+	}
+	return out
 }
 
 // index 返回 logstore 的索引。

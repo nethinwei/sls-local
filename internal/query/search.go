@@ -21,6 +21,8 @@ type Cond struct {
 	// Relaxed 是把短语放宽成「各词都出现」的条件，用来数候选行（meta.processedRows）。
 	Phrase  bool
 	Relaxed *Cond
+	// Need 是日志里必须出现的词（可为 nil），存储层据此跳过不可能命中的分段。
+	Need *Need
 }
 
 // Term 是 meta.terms 的一项。
@@ -116,14 +118,14 @@ func Search(q string, ix *index.Index) (Cond, error) {
 	if err != nil {
 		return Cond{}, err
 	}
-	cond := Cond{SQL: sql, Args: c.args, Terms: dedupTerms(terms(n, ix)), Phrase: c.phrases > 0}
+	cond := Cond{SQL: sql, Args: c.args, Terms: dedupTerms(terms(n, ix)), Phrase: c.phrases > 0, Need: needs(n, ix)}
 	if cond.Phrase {
 		rc := &compiler{ix: ix, relaxed: true}
 		rsql, err := n.compile(rc)
 		if err != nil {
 			return Cond{}, err
 		}
-		cond.Relaxed = &Cond{SQL: rsql, Args: rc.args}
+		cond.Relaxed = &Cond{SQL: rsql, Args: rc.args, Need: cond.Need} // 放宽短语不改变必须出现的词
 	}
 	return cond, nil
 }

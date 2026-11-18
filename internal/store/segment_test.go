@@ -50,11 +50,12 @@ func countAll(t *testing.T, s *Store) int64 {
 	return n
 }
 
+// segFiles 列出分段文件（不含旁边的 .bloom）。
 func segFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	var out []string
 	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() {
+		if err == nil && !d.IsDir() && filepath.Ext(path) == ".parquet" {
 			out = append(out, path)
 		}
 		return nil
@@ -179,17 +180,21 @@ func TestSegmentRecovery(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(part, "x.parquet.tmp"), []byte("garbage"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(orphan+".bloom", []byte("garbage"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	s = openSeg(t, path, dir)
 	defer s.Close()
 	if got := countAll(t, s); got != 130 {
 		t.Fatalf("count after restart = %d, want 130", got)
 	}
-	for _, f := range segFiles(t, dir) {
-		if f == orphan || filepath.Ext(f) == ".tmp" {
-			t.Fatalf("%s should have been removed", f)
+	filepath.WalkDir(dir, func(f string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && (f == orphan || f == orphan+".bloom" || filepath.Ext(f) == ".tmp") {
+			t.Errorf("%s should have been removed", f)
 		}
-	}
+		return nil
+	})
 	putSeq(t, s, 130, 10) // seq 接着已有的往下编
 	if _, err := s.Flush(ctx); err != nil {
 		t.Fatal(err)

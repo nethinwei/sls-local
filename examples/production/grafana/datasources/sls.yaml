@@ -1,0 +1,14 @@
+apiVersion: 1
+datasources:
+  - name: SLS
+    type: nethinwei-sls-datasource
+    uid: sls
+    access: proxy
+    isDefault: true
+    url: http://sls-read:8080 # 查询节点；插件把 project 拼进域名：demo.sls-read:8080
+    jsonData:
+      project: demo
+      logstore: app
+    secureJsonData:
+      accessKeyId: demo-grafana # sls-local.yaml 里的 access_keys
+      accessKeySecret: change-me-grafana-secret

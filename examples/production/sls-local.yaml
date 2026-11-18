@@ -1,0 +1,19 @@
+# 索引同快速开始；另外配置 AccessKey：设置后所有 SLS 接口都校验签名（v1），采集器与数据源要用这里的密钥。
+# 示例密钥，务必替换（生产里用 Secret 挂载这个文件）。
+access_keys:
+  - {id: demo-collector, secret: change-me-collector-secret}
+  - {id: demo-grafana, secret: change-me-grafana-secret}
+
+logstores:
+  - project: demo
+    logstore: app
+    index:
+      line:
+        token: [",", " ", "'", "\"", ";", "=", "(", ")", "[", "]", "{", "}", "?", "@", "&", "<", ">", "/", ":", "\n", "\t", "\r"]
+      keys:
+        level: {type: text, doc_value: true, token: [" "]}
+        msg: {type: text, doc_value: true, token: [",", " ", "'", "\"", ";", "=", "(", ")", "[", "]", "{", "}", "?", "@", "&", "<", ">", "/", ":", "\n", "\t", "\r"]}
+        service_name: {type: text, doc_value: true, token: [" "]}
+        trace_id: {type: text, doc_value: true, token: [" "]}
+        status: {type: long, doc_value: true}
+        cost_ms: {type: long, doc_value: true}

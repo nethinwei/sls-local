@@ -80,7 +80,7 @@ func main() {
 	if opts.SegmentDir == "" && *dataPath != "" {
 		opts.SegmentDir = filepath.Join(filepath.Dir(*dataPath), "segments")
 	}
-	if err := applyTarget(*target, &opts, dataPath, *reindex); err != nil {
+	if err := applyTarget(*target, &opts, dataPath, httpsAddr, *reindex); err != nil {
 		fmt.Fprintln(os.Stderr, "sls-local:", err)
 		os.Exit(2)
 	}
@@ -101,8 +101,15 @@ func main() {
 	}
 }
 
+// flagSet 判断命令行上是否显式给了某个参数。
+func flagSet(name string) bool {
+	set := false
+	flag.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
+}
+
 // applyTarget 按节点角色检查、调整参数。
-func applyTarget(target string, opts *store.Options, dataPath *string, reindex bool) error {
+func applyTarget(target string, opts *store.Options, dataPath, httpsAddr *string, reindex bool) error {
 	switch target {
 	case "all":
 		return nil
@@ -117,9 +124,7 @@ func applyTarget(target string, opts *store.Options, dataPath *string, reindex b
 		return fmt.Errorf("-target=%s needs -segments (local cache) or -data", target)
 	}
 	if target == "write" {
-		explicit := false
-		flag.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "flush-interval" })
-		if !explicit { // 查询节点看到的数据比写入晚一个刷段间隔
+		if !flagSet("flush-interval") { // 查询节点看到的数据比写入晚一个刷段间隔
 			opts.FlushInterval = 10 * time.Second
 		}
 		return nil
@@ -129,6 +134,11 @@ func applyTarget(target string, opts *store.Options, dataPath *string, reindex b
 	}
 	opts.ReadOnly = true
 	*dataPath = "" // 查询节点没有自己的数据：内存库，-data 只用来定缓存目录
+	if !flagSet("https") {
+		// 查询节点不接受写入：不开采集器用的 443。开着的话，采集器缓存的旧地址指到查询节点时，
+		// 它会对着 NotSupported 不停重试（实测 LoongCollector 每秒上万次）；连不上时它会退避
+		*httpsAddr = ""
+	}
 	return nil
 }
 

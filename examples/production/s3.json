@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "sls-local",
+      "credentials": [{"accessKey": "sls-local", "secretKey": "change-me-s3-secret"}],
+      "actions": ["Admin", "Read", "List", "Write"]
+    }
+  ]
+}

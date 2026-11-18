@@ -93,6 +93,8 @@ SLS 有、而日志系统通常不需要的能力（以 Loki 为参照：Loki �
 | 查询超过 `-query-timeout` | 400 `RequestTimeout`（4xx：SDK 对 5xx 会自动重试约 90 秒） |
 | 写入超过 `-write-rate` | 403 `WriteQuotaExceed` |
 | 查询节点收到写入、写入节点收到查询 | 501 `NotSupported`，文案说明该发往哪类节点 |
+| 写入节点的编号被另一个节点拿走（编号重复）后收到写入 | 500 `InternalServerError`；`/ready` 返回 503 |
+| 写入节点编号下的 seq 用完（2^48 条） | 500 `InternalServerError`：换一个没用过的 `-writer-id`、用空的数据目录启动 |
 
 - 权限只有「有没有合法的密钥」一级，没有 RAM 那样按 project / logstore / 操作的授权，也不支持 STS 临时凭证。
 - 查询节点看到的数据比写入晚一个刷段间隔；在那之前新的 logstore 在查询节点上不存在（`LogStoreNotExist`），在配置文件里预先声明可以避免。

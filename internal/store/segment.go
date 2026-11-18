@@ -236,6 +236,9 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	if s.segDir == "" {
 		return 0, nil
 	}
+	if s.fenced.Load() {
+		return 0, ErrFenced
+	}
 	s.flushMu.Lock()
 	defer s.flushMu.Unlock()
 
@@ -323,7 +326,7 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 // 合并后的文件的 seq 范围包含被合并的各个文件：写完改名之后、删掉旧文件之前崩溃的话，启动时按包含关系
 // 删掉旧文件（loadSegments）。所以只合并 seq 上相邻的一串，中间不能隔着不参与合并的文件。
 func (s *Store) Compact(ctx context.Context) (int, error) {
-	if s.segDir == "" {
+	if s.segDir == "" || s.fenced.Load() {
 		return 0, nil
 	}
 	s.flushMu.Lock()
@@ -407,11 +410,12 @@ func samePartition(a, b segment) bool {
 		writerOf(a.seqMin) == writerOf(b.seqMin)
 }
 
-// writerShift：写入节点的编号在 seq 的高位，各节点的 seq（与分段文件名）不会重复。
-const writerShift = 40
+// writerShift：写入节点的编号在 seq 的高位，各节点的 seq（与分段文件名）不会重复。每个编号 2^48 条（每秒
+// 10 万条约 89 年），用完时拒绝写入（ErrSeqExhausted）而不是编进下一个编号。
+const writerShift = 48
 
 // MaxWriterID 是写入节点编号的上限（不含）。
-const MaxWriterID = 1 << 22
+const MaxWriterID = 1 << (63 - writerShift)
 
 func writerOf(seq int64) int64 { return seq >> writerShift }
 

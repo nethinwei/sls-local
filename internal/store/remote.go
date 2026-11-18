@@ -297,7 +297,7 @@ func (s *Store) refresher(ctx context.Context, interval time.Duration) {
 
 // maintainRemote 重试上传、删除到期的对象、淘汰本地缓存（刷段线程定期调用）。
 func (s *Store) maintainRemote(ctx context.Context) error {
-	if s.remote == nil {
+	if s.remote == nil || s.fenced.Load() {
 		return nil
 	}
 	s.flushMu.Lock()

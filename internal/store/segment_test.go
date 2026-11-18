@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nethinwei/sls-local/internal/fieldcol"
+	"github.com/nethinwei/sls-local/internal/index"
 	"github.com/nethinwei/sls-local/internal/query"
 )
 
@@ -407,5 +408,116 @@ func TestSegmentContextFar(t *testing.T) {
 	}
 	if res.Back != 4 || res.Forward != 0 {
 		t.Fatalf("back = %d, forward = %d, want 4, 0", res.Back, res.Forward)
+	}
+}
+
+// 合并小分段：文件变少、数据不变、合并后的文件有字段列与 bloom；大文件两边的小文件不跨过它合并。
+func TestSegmentCompact(t *testing.T) {
+	defer func(n int64) { segmentFileRows = n }(segmentFileRows)
+	segmentFileRows = 100
+	ctx := context.Background()
+	dir := t.TempDir()
+	s := openSeg(t, "", dir)
+	defer s.Close()
+	flush := func(offset, n int) {
+		putSeq(t, s, offset, n)
+		if _, err := s.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range 6 {
+		flush(i*10, 10) // 6 个 10 行的小文件
+	}
+	flush(60, 80) // 一个大文件（≥ 50）
+	for i := range 3 {
+		flush(140+i*10, 10)
+	}
+	if n := len(segFiles(t, dir)); n != 10 {
+		t.Fatalf("%d segments before compaction", n)
+	}
+	merged, err := s.Compact(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged != 9 {
+		t.Errorf("merged %d files, want 9", merged)
+	}
+	sn := s.acquire()
+	var rows []int64
+	for _, g := range sn.segs {
+		rows = append(rows, g.rows)
+		if !g.cols["i"] {
+			t.Errorf("%s: no field column i", g.path)
+		}
+		if _, err := os.Stat(g.path + ".bloom"); err != nil {
+			t.Errorf("%s: %v", g.path, err)
+		}
+	}
+	s.release(sn)
+	slices.Sort(rows)
+	if !slices.Equal(rows, []int64{30, 60, 80}) {
+		t.Errorf("segment rows = %v, want [30 60 80]", rows)
+	}
+	if n := len(segFiles(t, dir)); n != 3 {
+		t.Errorf("%d segment files after compaction", n)
+	}
+	if got := countAll(t, s); got != 170 {
+		t.Errorf("count = %d, want 170", got)
+	}
+	cond, _ := query.Search("i: 45", index.Auto())
+	if n, err := s.Count(ctx, SearchParams{Project: "p", Logstore: "l", From: 0, To: segBase * 2, Where: cond}); err != nil || n != 1 {
+		t.Errorf("i: 45 = %d, %v", n, err)
+	}
+	if merged, err := s.Compact(ctx); err != nil || merged != 0 {
+		t.Errorf("second compaction merged %d, %v", merged, err)
+	}
+}
+
+// 合并写完、旧文件还没删时崩溃：重启后旧文件删掉，数据不重复。
+func TestSegmentCompactRecovery(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	path, dir := filepath.Join(tmp, "nested", "data", "sls.duckdb"), filepath.Join(tmp, "segments") // 数据目录不存在
+	s := openSeg(t, path, dir)
+	for i := range 3 {
+		putSeq(t, s, i*10, 10)
+		if _, err := s.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := segFiles(t, dir)
+	// 留一份旧文件的拷贝，合并后放回去，模拟没来得及删
+	saved := map[string][]byte{}
+	for _, f := range old {
+		for _, p := range []string{f, f + ".bloom"} {
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			saved[p] = b
+		}
+	}
+	if n, err := s.Compact(ctx); err != nil || n != 3 {
+		t.Fatalf("compact = %d, %v", n, err)
+	}
+	s.Close()
+	for p, b := range saved {
+		os.WriteFile(p, b, 0o644)
+	}
+	if n := len(segFiles(t, dir)); n != 4 {
+		t.Fatalf("%d files before restart", n)
+	}
+	s = openSeg(t, path, dir)
+	defer s.Close()
+	if got := countAll(t, s); got != 30 {
+		t.Errorf("count after restart = %d, want 30", got)
+	}
+	if n := len(segFiles(t, dir)); n != 1 {
+		t.Errorf("%d files after restart, want 1", n)
+	}
+	for p := range saved {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed", p)
+		}
 	}
 }

@@ -278,47 +278,14 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	for _, p := range parts {
-		dir := filepath.Join(s.segDir, url.PathEscape(p.project), url.PathEscape(p.logstore), strconv.FormatInt(p.hour, 10))
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fail(err)
-		}
 		g := segment{project: p.project, logstore: p.logstore, tmin: p.tmin, tmax: p.tmax,
 			seqMin: p.seqMin, seqMax: p.seqMax, rows: p.n}
-		g.path = filepath.Join(dir, fmt.Sprintf("%d-%d_%d-%d_%d.parquet", g.seqMin, g.seqMax, g.tmin, g.tmax, g.rows))
-		tmp := g.path + ".tmp"
 		// COPY 不支持参数，值都内联：project/logstore 经 sqlQuote，其余是整数
-		filter := fmt.Sprintf(`seq BETWEEN %d AND %d AND project = %s AND logstore = %s AND t >= %d AND t < %d`,
+		from := fmt.Sprintf(`logs WHERE seq BETWEEN %d AND %d AND project = %s AND logstore = %s AND t >= %d AND t < %d`,
 			p.seqMin, p.seqMax, sqlQuote(p.project), sqlQuote(p.logstore), p.hour, p.hour+segmentHour)
-		keys, err := s.hotKeys(ctx, filter, p.n)
-		if err != nil {
+		if err := s.writeSegment(ctx, &g, p.hour, from); err != nil {
 			return fail(err)
 		}
-		g.cols = map[string]bool{}
-		for _, k := range keys {
-			g.cols[k] = true
-		}
-		q := fmt.Sprintf(`COPY (SELECT %s%s FROM logs WHERE %s ORDER BY t, coalesce(ns, 0), seq)
-			TO %s (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE %d)`,
-			baseCols, fieldCols(keys, nil), filter, sqlQuote(tmp), segmentRowGroup)
-		if _, err := s.db.ExecContext(ctx, q); err != nil {
-			os.Remove(tmp)
-			return fail(fmt.Errorf("write segment: %w", err))
-		}
-		if err := syncFile(tmp); err != nil {
-			os.Remove(tmp)
-			return fail(err)
-		}
-		// bloom 先于分段文件就位：分段文件在，它的 bloom 就是完整的（没有 bloom 的分段只是不跳过）
-		if err := s.writeBloom(ctx, g.path+".bloom", filter, p.project, p.logstore); err != nil {
-			os.Remove(tmp)
-			return fail(err)
-		}
-		if err := os.Rename(tmp, g.path); err != nil {
-			os.Remove(g.path + ".bloom")
-			os.Remove(tmp)
-			return fail(err)
-		}
-		syncFile(dir)
 		added = append(added, g)
 		total += p.n
 	}
@@ -332,17 +299,143 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	return total, nil
 }
 
+// Compact 合并小分段：同一个 project/logstore/小时里，seq 上相邻、各自不到 segmentFileRows/2 行的文件，
+// 合成不超过 segmentFileRows 行的一个（刷段频繁、迟到的日志都会留下小文件，文件多了查询要打开的也多）。
+// 返回合并掉的文件数。
+//
+// 合并后的文件的 seq 范围包含被合并的各个文件：写完改名之后、删掉旧文件之前崩溃的话，启动时按包含关系
+// 删掉旧文件（loadSegments）。所以只合并 seq 上相邻的一串，中间不能隔着不参与合并的文件。
+func (s *Store) Compact(ctx context.Context) (int, error) {
+	if s.segDir == "" {
+		return 0, nil
+	}
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	s.segMu.Lock()
+	cur := s.cur
+	s.segMu.Unlock()
+
+	segs := slices.Clone(cur.segs)
+	slices.SortFunc(segs, compareSegments)
+	var groups [][]segment
+	var run []segment
+	var runRows int64
+	closeRun := func() {
+		if len(run) >= 2 {
+			groups = append(groups, run)
+		}
+		run, runRows = nil, 0
+	}
+	for i, g := range segs {
+		if i > 0 && !samePartition(segs[i-1], g) {
+			closeRun()
+		}
+		if g.rows >= segmentFileRows/2 {
+			closeRun()
+			continue
+		}
+		if runRows+g.rows > segmentFileRows {
+			closeRun()
+		}
+		run = append(run, g)
+		runRows += g.rows
+	}
+	closeRun()
+
+	merged := 0
+	for _, grp := range groups {
+		m := segment{project: grp[0].project, logstore: grp[0].logstore, tmin: grp[0].tmin, tmax: grp[0].tmax,
+			seqMin: grp[0].seqMin, seqMax: grp[len(grp)-1].seqMax}
+		paths := make([]string, len(grp))
+		for i, g := range grp {
+			m.tmin, m.tmax, m.rows = min(m.tmin, g.tmin), max(m.tmax, g.tmax), m.rows+g.rows
+			paths[i] = sqlQuote(g.path)
+		}
+		from := "read_parquet([" + strings.Join(paths, ", ") + "], union_by_name = true)"
+		if err := s.writeSegment(ctx, &m, hourOf(m), from); err != nil {
+			return merged, fmt.Errorf("compact segments: %w", err)
+		}
+		s.segMu.Lock()
+		cur = s.cur
+		s.segMu.Unlock()
+		next := &snapshot{boundary: cur.boundary}
+		for _, g := range cur.segs {
+			if !slices.ContainsFunc(grp, func(x segment) bool { return x.path == g.path }) {
+				next.segs = append(next.segs, g)
+			}
+		}
+		next.segs = append(next.segs, m)
+		s.publish(next, func() { s.removeSegments(grp) })
+		merged += len(grp)
+	}
+	return merged, nil
+}
+
+func hourOf(g segment) int64 { return g.tmin - g.tmin%segmentHour }
+
+func samePartition(a, b segment) bool {
+	return a.project == b.project && a.logstore == b.logstore && hourOf(a) == hourOf(b)
+}
+
+// compareSegments 按分区、seq 起点排序；起点相同时范围大的在前（包含别人的在前）。
+func compareSegments(a, b segment) int {
+	return cmp.Or(cmp.Compare(a.project, b.project), cmp.Compare(a.logstore, b.logstore),
+		cmp.Compare(hourOf(a), hourOf(b)), cmp.Compare(a.seqMin, b.seqMin), cmp.Compare(b.seqMax, a.seqMax))
+}
+
+// writeSegment 把 from（FROM 子句：表与 WHERE 条件）选中的日志写成分段 g（g 的元数据由调用方填好），
+// 同时写好它的 bloom、定下 g.path 与 g.cols。字段列一律从 JSON 现取：来源可能是各自写了不同字段列的分段。
+func (s *Store) writeSegment(ctx context.Context, g *segment, hour int64, from string) error {
+	dir := filepath.Join(s.segDir, url.PathEscape(g.project), url.PathEscape(g.logstore), strconv.FormatInt(hour, 10))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	g.path = filepath.Join(dir, fmt.Sprintf("%d-%d_%d-%d_%d.parquet", g.seqMin, g.seqMax, g.tmin, g.tmax, g.rows))
+	tmp := g.path + ".tmp"
+	keys, err := s.hotKeys(ctx, from, g.rows)
+	if err != nil {
+		return err
+	}
+	g.cols = map[string]bool{}
+	for _, k := range keys {
+		g.cols[k] = true
+	}
+	q := fmt.Sprintf(`COPY (SELECT %s%s FROM %s ORDER BY t, coalesce(ns, 0), seq)
+		TO %s (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE %d)`,
+		baseCols, fieldCols(keys, nil), from, sqlQuote(tmp), segmentRowGroup)
+	if _, err := s.db.ExecContext(ctx, q); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("write segment: %w", err)
+	}
+	if err := syncFile(tmp); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// bloom 先于分段文件就位：分段文件在，它的 bloom 就是完整的（没有 bloom 的分段只是不跳过）
+	if err := s.writeBloom(ctx, g.path+".bloom", from, g.project, g.logstore); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, g.path); err != nil {
+		os.Remove(g.path + ".bloom")
+		os.Remove(tmp)
+		return err
+	}
+	syncFile(dir)
+	return nil
+}
+
 // segmentFileRows 是一个分段文件最多的行数（测试里调小）。
 var segmentFileRows int64 = 1_000_000
 
-// writeBloom 为 filter 选中的日志建 bloom：logstore 用到的每组分词符一个。
-func (s *Store) writeBloom(ctx context.Context, path, filter, project, logstore string) error {
+// writeBloom 为 from（FROM 子句）选中的日志建 bloom：logstore 用到的每组分词符一个。
+func (s *Store) writeBloom(ctx context.Context, path, from, project, logstore string) error {
 	f := bloomFile{}
 	for _, sig := range s.tokenSigs(project, logstore) {
 		// 全文列（含 __source__、字段名、非数值字段的值）加上全部字段的值，按分词符切成整词，小写
 		rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT w FROM (SELECT unnest(string_split_regex(lower(
 			fulltext || chr(31) || coalesce(array_to_string(json_extract_string(contents, '$.*'), chr(31)), '')), ?)) AS w
-			FROM logs WHERE `+filter+`) WHERE w <> ''`, tokenClass(sig))
+			FROM `+from+`) WHERE w <> ''`, tokenClass(sig))
 		if err != nil {
 			return fmt.Errorf("collect words: %w", err)
 		}
@@ -400,10 +493,10 @@ const (
 	hotKeyRatio = 100
 )
 
-// hotKeys 是 filter 选中的 n 条日志里常见的字段，按出现次数从多到少。不常见的字段写成列也基本是 NULL，
+// hotKeys 是 from（FROM 子句）选中的 n 条日志里常见的字段，按出现次数从多到少。不常见的字段写成列也基本是 NULL，
 // 查询时现取 JSON 的代价很小。
-func (s *Store) hotKeys(ctx context.Context, filter string, n int64) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT k FROM (SELECT unnest(json_keys(contents)) AS k FROM logs WHERE `+filter+`)
+func (s *Store) hotKeys(ctx context.Context, from string, n int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT k FROM (SELECT unnest(json_keys(contents)) AS k FROM `+from+`)
 		GROUP BY k HAVING count(*) >= ? ORDER BY count(*) DESC, k LIMIT ?`, max(n/hotKeyRatio, 1), maxHotKeys)
 	if err != nil {
 		return nil, fmt.Errorf("find hot keys: %w", err)
@@ -451,6 +544,9 @@ func (s *Store) flusher(ctx context.Context, interval time.Duration) {
 		if _, err := s.Flush(ctx); err != nil && ctx.Err() == nil && s.onError != nil {
 			s.onError(fmt.Errorf("flush segments: %w", err))
 		}
+		if _, err := s.Compact(ctx); err != nil && ctx.Err() == nil && s.onError != nil {
+			s.onError(err)
+		}
 	}
 }
 
@@ -467,6 +563,9 @@ func (s *Store) maybeFlush(ctx context.Context, seq int64) {
 	}
 	if s.syncFlush {
 		if _, err := s.Flush(ctx); err != nil && s.onError != nil {
+			s.onError(err)
+		}
+		if _, err := s.Compact(ctx); err != nil && s.onError != nil {
 			s.onError(err)
 		}
 		return
@@ -529,6 +628,22 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load segments: %w", err)
 	}
+	// 合并写完、旧文件还没删时崩溃：同一分区里 seq 范围被别的文件包含的，是已经合并进去的旧文件
+	slices.SortFunc(sn.segs, compareSegments)
+	kept := sn.segs[:0]
+	for _, g := range sn.segs {
+		if n := len(kept); n > 0 && samePartition(kept[n-1], g) && g.seqMax <= kept[n-1].seqMax {
+			if err := removeIfExists(g.path + ".bloom"); err != nil {
+				return nil, err
+			}
+			if err := removeIfExists(g.path); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		kept = append(kept, g)
+	}
+	sn.segs = kept
 	slices.SortFunc(sn.segs, func(a, b segment) int { return cmp.Compare(a.seqMin, b.seqMin) })
 	if err := s.loadColumns(ctx, sn.segs); err != nil {
 		return nil, err

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/nethinwei/sls-local/internal/fieldcol"
+	"github.com/nethinwei/sls-local/internal/index"
+	"github.com/nethinwei/sls-local/internal/query"
 )
 
 // 分段：logs 表只是「头部」，写入后先留在这里；刷段时按写入序号 seq 划一条边界，边界以内的日志按
@@ -242,8 +244,13 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 		hour, tmin, tmax  int64
 		seqMin, seqMax, n int64
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT project, logstore, t - t % ?, min(t), max(t), min(seq), max(seq), count(*)
-		FROM logs WHERE seq > ? AND seq <= ? GROUP BY ALL`, segmentHour, lower, upper)
+	// 每个 project/logstore/小时 按写入顺序切成不超过 segmentFileRows 行的文件：bloom 按文件跳过，文件太大就
+	// 跳不掉什么。一块是 seq 上连续的一段（在这个分区里），所以 seq 范围加分区条件就能选出它。
+	rows, err := s.db.QueryContext(ctx, `SELECT project, logstore, h, min(t), max(t), min(seq), max(seq), count(*)
+		FROM (SELECT project, logstore, t, seq, t - t % ? AS h,
+			(row_number() OVER (PARTITION BY project, logstore, t - t % ? ORDER BY seq) - 1) // ? AS chunk
+			FROM logs WHERE seq > ? AND seq <= ?)
+		GROUP BY project, logstore, h, chunk ORDER BY min(seq)`, segmentHour, segmentHour, segmentFileRows, lower, upper)
 	if err != nil {
 		return 0, err
 	}
@@ -266,6 +273,7 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	fail := func(err error) (int64, error) {
 		for _, g := range added {
 			os.Remove(g.path)
+			os.Remove(g.path + ".bloom")
 		}
 		return 0, err
 	}
@@ -279,8 +287,8 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 		g.path = filepath.Join(dir, fmt.Sprintf("%d-%d_%d-%d_%d.parquet", g.seqMin, g.seqMax, g.tmin, g.tmax, g.rows))
 		tmp := g.path + ".tmp"
 		// COPY 不支持参数，值都内联：project/logstore 经 sqlQuote，其余是整数
-		filter := fmt.Sprintf(`seq > %d AND seq <= %d AND project = %s AND logstore = %s AND t >= %d AND t < %d`,
-			lower, upper, sqlQuote(p.project), sqlQuote(p.logstore), p.hour, p.hour+segmentHour)
+		filter := fmt.Sprintf(`seq BETWEEN %d AND %d AND project = %s AND logstore = %s AND t >= %d AND t < %d`,
+			p.seqMin, p.seqMax, sqlQuote(p.project), sqlQuote(p.logstore), p.hour, p.hour+segmentHour)
 		keys, err := s.hotKeys(ctx, filter, p.n)
 		if err != nil {
 			return fail(err)
@@ -300,7 +308,13 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 			os.Remove(tmp)
 			return fail(err)
 		}
+		// bloom 先于分段文件就位：分段文件在，它的 bloom 就是完整的（没有 bloom 的分段只是不跳过）
+		if err := s.writeBloom(ctx, g.path+".bloom", filter, p.project, p.logstore); err != nil {
+			os.Remove(tmp)
+			return fail(err)
+		}
 		if err := os.Rename(tmp, g.path); err != nil {
+			os.Remove(g.path + ".bloom")
 			os.Remove(tmp)
 			return fail(err)
 		}
@@ -317,6 +331,68 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	s.publish(next, func() { s.deleteHead(upper) })
 	return total, nil
 }
+
+// segmentFileRows 是一个分段文件最多的行数（测试里调小）。
+var segmentFileRows int64 = 1_000_000
+
+// writeBloom 为 filter 选中的日志建 bloom：logstore 用到的每组分词符一个。
+func (s *Store) writeBloom(ctx context.Context, path, filter, project, logstore string) error {
+	f := bloomFile{}
+	for _, sig := range s.tokenSigs(project, logstore) {
+		// 全文列（含 __source__、字段名、非数值字段的值）加上全部字段的值，按分词符切成整词，小写
+		rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT w FROM (SELECT unnest(string_split_regex(lower(
+			fulltext || chr(31) || coalesce(array_to_string(json_extract_string(contents, '$.*'), chr(31)), '')), ?)) AS w
+			FROM logs WHERE `+filter+`) WHERE w <> ''`, tokenClass(sig))
+		if err != nil {
+			return fmt.Errorf("collect words: %w", err)
+		}
+		var words []string
+		for rows.Next() {
+			var w string
+			if err := rows.Scan(&w); err != nil {
+				rows.Close()
+				return err
+			}
+			words = append(words, w)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		b := newBloom(len(words))
+		for _, w := range words {
+			b.add(w)
+		}
+		f[sig] = b
+	}
+	return writeBloomFile(path, f)
+}
+
+// tokenClass 是按分词符切词的 RE2：分词符组成的字符类，连续多个算一处。
+func tokenClass(sig string) string {
+	var b strings.Builder
+	b.WriteString("[")
+	for _, r := range sig {
+		switch r {
+		case '\\', ']', '[', '^', '-':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	b.WriteString("]+")
+	return b.String()
+}
+
+// tokenSigs 是 logstore 的全文索引与 text 字段用到的分词符组（query.TokenSig）。
+func (s *Store) tokenSigs(project, logstore string) []string {
+	if fn := s.sigs.Load(); fn != nil {
+		return (*fn)(project, logstore)
+	}
+	return []string{query.TokenSig(strings.Join(index.DefaultTokens, ""))}
+}
+
+// SetTokenSigs 设置每个 logstore 用到的分词符组（由索引配置决定，见 api）。没有设置时按默认分词符。
+func (s *Store) SetTokenSigs(fn func(project, logstore string) []string) { s.sigs.Store(&fn) }
 
 // 每个分段最多把这么多字段写成独立的列；字段至少出现在 1/hotKeyRatio 的日志里才写。
 const (
@@ -429,14 +505,23 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 			return err
 		}
 		if strings.HasSuffix(path, ".tmp") {
-			return os.Remove(path)
+			return removeIfExists(path)
+		}
+		if seg, ok := strings.CutSuffix(path, ".bloom"); ok { // 分段文件没了（或没写完）的 bloom
+			if _, err := os.Stat(seg); os.IsNotExist(err) {
+				return removeIfExists(path)
+			}
+			return nil
 		}
 		g, ok := parseSegment(s.segDir, path)
 		if !ok {
 			return nil // 不认识的文件不动
 		}
-		if g.seqMax > boundary {
-			return os.Remove(path)
+		if g.seqMax > boundary { // 遍历时可能已经（或稍后）遇到它的 .bloom：两边都容许文件已不存在
+			if err := removeIfExists(path + ".bloom"); err != nil {
+				return err
+			}
+			return removeIfExists(path)
 		}
 		sn.segs = append(sn.segs, g)
 		return nil
@@ -487,6 +572,14 @@ func (s *Store) loadColumns(ctx context.Context, segs []segment) error {
 	return rows.Err()
 }
 
+// removeIfExists 删除文件，文件已经不存在不算错。
+func removeIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // parseSegment 从路径解析分段的元数据。
 func parseSegment(root, path string) (segment, bool) {
 	rel, err := filepath.Rel(root, path)
@@ -535,14 +628,20 @@ func (s *Store) dropSegmentsBefore(cutoff int64) int64 {
 	if len(drop) == 0 {
 		return 0
 	}
-	s.publish(&snapshot{boundary: cur.boundary, segs: keep}, func() {
-		for _, g := range drop {
-			if err := os.Remove(g.path); err != nil && !os.IsNotExist(err) && s.onError != nil {
+	s.publish(&snapshot{boundary: cur.boundary, segs: keep}, func() { s.removeSegments(drop) })
+	return n
+}
+
+// removeSegments 删除分段文件与它们的 bloom。
+func (s *Store) removeSegments(segs []segment) {
+	for _, g := range segs {
+		s.blooms.forget(g.path)
+		for _, p := range []string{g.path, g.path + ".bloom"} {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) && s.onError != nil {
 				s.onError(err)
 			}
 		}
-	})
-	return n
+	}
 }
 
 // unflush 把全部分段读回头部（-reindex 等需要改写全部日志时用），调用方持有 flushMu。
@@ -576,10 +675,6 @@ func (s *Store) unflush(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.publish(&snapshot{}, func() {
-		for _, g := range cur.segs {
-			os.Remove(g.path)
-		}
-	})
+	s.publish(&snapshot{}, func() { s.removeSegments(cur.segs) })
 	return nil
 }

@@ -37,9 +37,11 @@ type SearchResult struct {
 }
 
 // source 是检索范围（project、logstore、时间）在快照里的数据，作为 FROM 后面的表，带上 extra 与检索条件、
-// SPL 用到的字段列。
-func (p *SearchParams) source(sn *snapshot, extra ...string) string {
-	return sn.source(p.Project, p.Logstore, p.From, p.To, p.keys(extra...))
+// SPL 用到的字段列。按 bloom 跳过不可能满足检索条件的分段。
+func (s *Store) source(sn *snapshot, p *SearchParams, extra ...string) string {
+	return sn.sourceOf(p.Project, p.Logstore, p.keys(extra...), func(g *segment) bool {
+		return g.tmax >= p.From && g.tmin <= p.To && s.mayContain(g, p.Where.Need)
+	})
 }
 
 // keys 是检索条件、SPL 与 extra 里用到的字段（fieldcol）。
@@ -90,7 +92,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	for _, k := range p.keys() { // SPL 的 where、extend 引用字段列
 		fields += ", " + fieldcol.Ref(k)
 	}
-	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys`+fields+` FROM `+p.source(sn)+` WHERE `+where+
+	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys`+fields+` FROM `+s.source(sn, &p)+` WHERE `+where+
 		` AND t BETWEEN ? AND ?`, p.Stages)
 	extCols := ""
 	for _, c := range ext {
@@ -274,7 +276,7 @@ func (s *Store) Count(ctx context.Context, p SearchParams) (int64, error) {
 	defer s.release(sn)
 	where, args := p.where()
 	var n int64
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+p.source(sn)+` WHERE `+where, args...).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+s.source(sn, &p)+` WHERE `+where, args...).Scan(&n); err != nil {
 		return 0, queryError(err)
 	}
 	return n, nil
@@ -623,7 +625,8 @@ func (s *Store) scanRows(ctx context.Context, q string, args ...any) ([]row, err
 func (s *Store) Histogram(ctx context.Context, project, logstore string, from, to, interval int64, where query.Cond) (map[int64]int64, error) {
 	sn := s.acquire()
 	defer s.release(sn)
-	q := `SELECT t - t % ? AS b, count(*) FROM ` + sn.source(project, logstore, from, to, fieldcol.Keys(where.SQL)) +
+	hp := SearchParams{Project: project, Logstore: logstore, From: from, To: to, Where: where}
+	q := `SELECT t - t % ? AS b, count(*) FROM ` + s.source(sn, &hp) +
 		` WHERE project = ? AND logstore = ? AND t >= ? AND t < ? AND ` +
 		where.SQL + ` GROUP BY b`
 	args := append([]any{interval, project, logstore, from, to}, where.Args...)

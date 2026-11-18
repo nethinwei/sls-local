@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/duckdb/duckdb-go/v2"
@@ -96,6 +97,8 @@ type Store struct {
 	stopFlusher context.CancelFunc
 	flusherDone chan struct{}
 	onError     func(error)
+	blooms      *bloomCache
+	sigs        atomic.Pointer[func(project, logstore string) []string] // 见 SetTokenSigs
 }
 
 // dsnOptions 关掉 DuckDB 安装扩展的能力；integer_division 让整数相除得整数（与 SLS/Presto 一致）。
@@ -126,6 +129,8 @@ type Options struct {
 	FlushRows     int64
 	// OnError 接收后台刷段、清理时的错误（可为空）。
 	OnError func(error)
+	// BloomCache 是分段 bloom 的内存缓存上限（字节），为 0 时用默认值。
+	BloomCache int
 }
 
 // DefaultSQLOffset 是 SLS 的默认时区 UTC+8。
@@ -152,7 +157,8 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, fmt.Errorf("open duckdb %q: %w", path, err)
 	}
 	db := sql.OpenDB(connector)
-	s := &Store{db: db, known: map[string]bool{}, onError: opts.OnError}
+	s := &Store{db: db, known: map[string]bool{}, onError: opts.OnError,
+		blooms: newBloomCache(cmp.Or(opts.BloomCache, DefaultBloomCache))}
 	if err := s.initSegments(&opts); err != nil {
 		db.Close()
 		return nil, err

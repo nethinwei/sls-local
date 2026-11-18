@@ -145,3 +145,24 @@ func (ix *Index) NumericKeys() map[string]bool {
 	}
 	return out
 }
+
+// TokenSets 返回全文索引与 text 字段用到的分词符（去重）：分段的 bloom 按每组分词符各建一个。
+func (ix *Index) TokenSets() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(f *Field) {
+		if f != nil && f.Type == "text" && !seen[f.Tokens] {
+			seen[f.Tokens] = true
+			out = append(out, f.Tokens)
+		}
+	}
+	add(ix.Line)
+	for _, f := range ix.keys {
+		add(f)
+	}
+	if ix.Auto { // 自动索引的字段是现建的，不在 keys 里
+		add(defaultText(""))
+	}
+	sort.Strings(out)
+	return out
+}

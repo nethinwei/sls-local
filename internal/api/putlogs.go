@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -46,10 +47,17 @@ func (s *Server) putLogs(w http.ResponseWriter, r *http.Request, project string)
 		}
 		group.Logs = append(group.Logs, log)
 	}
+	if !s.allowWrite(project, logstore, len(group.Logs)) {
+		s.Metrics.Inc("sls_local_rejected_total", "Requests rejected by limits.", "reason", "write_rate")
+		s.fail(w, r, http.StatusForbidden, "WriteQuotaExceed", fmt.Sprintf("write quota exceeded: logstore %s accepts %g logs/s", logstore, s.limits.WriteRate))
+		return
+	}
 	group.NumericKeys = s.index(project, logstore).NumericKeys()
 	if err := s.store.Append(r.Context(), project, logstore, group); err != nil {
 		s.fail(w, r, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
+	s.Metrics.Add("sls_local_ingested_logs_total", "Logs written.", float64(len(group.Logs)))
+	s.Metrics.Add("sls_local_ingested_bytes_total", "Bytes of PutLogs bodies as received (compressed).", float64(len(body)))
 	w.WriteHeader(http.StatusOK)
 }

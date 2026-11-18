@@ -59,8 +59,10 @@ type cleanup struct {
 const (
 	// DefaultFlushInterval 与 DefaultFlushRows 是刷段的默认时机：间隔到了，或头部积累的行数到了。
 	DefaultFlushInterval = 5 * time.Minute
-	DefaultFlushRows     = 1_000_000
-	segmentHour          = 3600
+	// DefaultRefreshInterval 是查询节点重新列出对象存储上分段的间隔。
+	DefaultRefreshInterval = 10 * time.Second
+	DefaultFlushRows       = 1_000_000
+	segmentHour            = 3600
 	// segmentRowGroup 是分段的 row group 行数。DuckDB 默认 122880：翻页只取一页时也要解压一整个 row group
 	// 的 JSON 列，200 万条下 * 检索 3 → 14 ms；16384 时 5.8 ms，聚合不受影响。zstd 比 lz4 慢 10%～15%，
 	// 体积小 40%（对象存储上更省）。
@@ -305,6 +307,8 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	}
 	next := &snapshot{boundary: upper, segs: append(slices.Clone(cur.segs), added...)}
 	s.publish(next, func() { s.deleteHead(upper) })
+	s.stats.flushes.Add(1)
+	s.stats.flushedRows.Add(total)
 	s.markPending(added) // 提交之后才上传；失败的下次再传
 	if err := s.upload(ctx); err != nil && s.onError != nil {
 		s.onError(err)
@@ -383,6 +387,7 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 		next.segs = append(next.segs, m)
 		s.publish(next, func() { s.removeSegments(grp) })
 		merged += len(grp)
+		s.stats.compactedFiles.Add(int64(len(grp)))
 		if s.remote != nil {
 			s.markPending([]segment{m})
 			if err := s.upload(ctx); err != nil { // 合并后的没传上去之前，对象存储上的旧分段不删
@@ -396,9 +401,19 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 
 func hourOf(g segment) int64 { return g.tmin - g.tmin%segmentHour }
 
+// samePartition：同一个写入节点的同一个 project/logstore/小时（合并、包含关系只在这个范围里）。
 func samePartition(a, b segment) bool {
-	return a.project == b.project && a.logstore == b.logstore && hourOf(a) == hourOf(b)
+	return a.project == b.project && a.logstore == b.logstore && hourOf(a) == hourOf(b) &&
+		writerOf(a.seqMin) == writerOf(b.seqMin)
 }
+
+// writerShift：写入节点的编号在 seq 的高位，各节点的 seq（与分段文件名）不会重复。
+const writerShift = 40
+
+// MaxWriterID 是写入节点编号的上限（不含）。
+const MaxWriterID = 1 << 22
+
+func writerOf(seq int64) int64 { return seq >> writerShift }
 
 // compareSegments 按分区、seq 起点排序；起点相同时范围大的在前（包含别人的在前）。
 func compareSegments(a, b segment) int {
@@ -576,15 +591,20 @@ func (s *Store) flusher(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// pendingRows 是头部里还没刷段的行数（seq 是最后写入的一行）。
+func (s *Store) pendingRows(seq int64) int64 {
+	s.segMu.Lock()
+	defer s.segMu.Unlock()
+	// 写入节点的 seq 从 writerID<<writerShift 起编：还没刷过段时边界是 0，不能按它算
+	return seq - max(s.cur.boundary, s.writerID<<writerShift)
+}
+
 // maybeFlush 在头部积累的行数到了阈值时触发刷段（Append 之后调用）。
 func (s *Store) maybeFlush(ctx context.Context, seq int64) {
 	if s.segDir == "" || s.flushRows <= 0 {
 		return
 	}
-	s.segMu.Lock()
-	pending := seq - s.cur.boundary
-	s.segMu.Unlock()
-	if pending < s.flushRows {
+	if s.pendingRows(seq) < s.flushRows {
 		return
 	}
 	if s.syncFlush {
@@ -628,20 +648,17 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 		if remote, err = s.remoteSegments(ctx); err != nil {
 			return nil, err
 		}
-		created := map[[2]string]int64{}
-		for _, g := range remote {
-			boundary = max(boundary, g.seqMax)
-			inRemote[g.path] = true
-			k := [2]string{g.project, g.logstore}
-			if c, ok := created[k]; !ok || g.tmin < c {
-				created[k] = g.tmin
-			}
+		if !s.readOnly { // 写入节点只管自己写的分段
+			remote = slices.DeleteFunc(remote, func(g segment) bool { return !s.owns(g) })
 		}
-		// logstore 的登记在本地库里：换了磁盘时按对象存储上的分段补上（创建时间取最早的日志）
-		for k, c := range created {
-			if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO logstores VALUES (?, ?, ?)`, k[0], k[1], c); err != nil {
-				return nil, err
+		for _, g := range remote {
+			if !s.readOnly {
+				boundary = max(boundary, g.seqMax)
 			}
+			inRemote[g.path] = true
+		}
+		if err := s.registerLogstores(ctx, remote); err != nil {
+			return nil, err
 		}
 	}
 	sn := &snapshot{st: s, boundary: boundary}
@@ -695,7 +712,7 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 			if err := removeIfExists(g.path); err != nil {
 				return nil, err
 			}
-			if inRemote[g.path] {
+			if inRemote[g.path] && s.owns(g) {
 				s.trashRemote([]segment{g})
 			}
 			continue

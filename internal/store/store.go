@@ -102,6 +102,9 @@ type Store struct {
 	blooms      *bloomCache
 	remote      *remoteState                                            // 分段放在对象存储上时（见 remote.go）
 	sigs        atomic.Pointer[func(project, logstore string) []string] // 见 SetTokenSigs
+	writerID    int64
+	readOnly    bool
+	stats       counters
 }
 
 // dsnOptions 关掉 DuckDB 安装扩展的能力；integer_division 让整数相除得整数（与 SLS/Presto 一致）。
@@ -110,12 +113,16 @@ const dsnOptions = "?autoinstall_known_extensions=false&autoload_known_extension
 // lockDown 关掉 DuckDB 访问外部文件与网络的能力：| where 与 SQL 接受用户写的表达式，不能借 read_csv 之类的
 // 函数读到宿主机上的文件。只放行分段目录（读写 Parquet 分段）。lock_configuration 防止语句里用 SET 改回来。
 // 这些是全局设置，打开数据库后、处理任何请求前执行一次。
-func lockDown(segDir string) string {
+func lockDown(segDir, memoryLimit string) string {
 	dirs := "[]"
 	if segDir != "" {
 		dirs = "[" + sqlQuote(segDir+string(filepath.Separator)) + "]"
 	}
-	return "SET allowed_directories = " + dirs + "; SET enable_external_access = false; " +
+	mem := ""
+	if memoryLimit != "" { // 例如 8GB；超过时 DuckDB 把中间结果写到临时文件或报错，而不是把进程撑爆
+		mem = "SET memory_limit = " + sqlQuote(memoryLimit) + "; "
+	}
+	return mem + "SET allowed_directories = " + dirs + "; SET enable_external_access = false; " +
 		"SET parquet_metadata_cache = true; SET lock_configuration = true"
 }
 
@@ -134,6 +141,14 @@ type Options struct {
 	OnError func(error)
 	// BloomCache 是分段 bloom 的内存缓存上限（字节），为 0 时用默认值。
 	BloomCache int
+	// WriterID 是写入节点的编号（多个写入节点共用一个对象存储时各不相同，0 ≤ WriterID < MaxWriterID）。
+	WriterID int64
+	// ReadOnly 是查询节点：不接受写入，不刷段、不合并、不删分段，每 RefreshInterval 重新列出对象存储上的
+	// 分段（需要 Storage）。
+	ReadOnly        bool
+	RefreshInterval time.Duration
+	// MemoryLimit 是 DuckDB 的内存上限（如 8GB）；为空时用 DuckDB 的默认值（物理内存的 80%）。
+	MemoryLimit string
 	// Storage 是放分段的对象存储（file:///path 或 s3://bucket/prefix，见 OpenObjects）；为空时分段只在
 	// SegmentDir。设置时 SegmentDir 是本地缓存，CacheSize 是它的上限（字节，0 表示不限）。
 	Storage   string
@@ -169,7 +184,15 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, fmt.Errorf("open duckdb %q: %w", path, err)
 	}
 	db := sql.OpenDB(connector)
-	s := &Store{db: db, known: map[string]bool{}, onError: opts.OnError,
+	if opts.WriterID < 0 || opts.WriterID >= MaxWriterID {
+		db.Close()
+		return nil, fmt.Errorf("writer id %d: want 0 <= id < %d", opts.WriterID, MaxWriterID)
+	}
+	if opts.ReadOnly && opts.Storage == "" {
+		db.Close()
+		return nil, errors.New("a read-only store needs object storage")
+	}
+	s := &Store{db: db, known: map[string]bool{}, onError: opts.OnError, writerID: opts.WriterID, readOnly: opts.ReadOnly,
 		blooms: newBloomCache(cmp.Or(opts.BloomCache, DefaultBloomCache))}
 	if err := s.initSegments(&opts); err != nil {
 		db.Close()
@@ -192,7 +215,7 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 			s.remote.grace = 0
 		}
 	}
-	if _, err := db.ExecContext(ctx, lockDown(s.segDir)); err != nil {
+	if _, err := db.ExecContext(ctx, lockDown(s.segDir, opts.MemoryLimit)); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("configure duckdb: %w", err)
 	}
@@ -208,7 +231,7 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	s.seq = max(s.seq, s.cur.boundary)
+	s.seq = max(s.seq, s.cur.boundary, opts.WriterID<<writerShift)
 	if s.con, err = connector.Connect(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -218,7 +241,12 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if s.segDir != "" && !s.syncFlush {
+	switch {
+	case s.readOnly:
+		fctx, cancel := context.WithCancel(context.Background())
+		s.stopFlusher, s.flusherDone = cancel, make(chan struct{})
+		go s.refresher(fctx, cmp.Or(opts.RefreshInterval, DefaultRefreshInterval))
+	case s.segDir != "" && !s.syncFlush:
 		fctx, cancel := context.WithCancel(context.Background())
 		s.stopFlusher, s.flushNow, s.flusherDone = cancel, make(chan struct{}, 1), make(chan struct{})
 		go s.flusher(fctx, cmp.Or(opts.FlushInterval, DefaultFlushInterval))
@@ -374,6 +402,9 @@ func (s *Store) Close() error {
 	return err
 }
 
+// Ping 检查数据库能不能用（就绪检查）。
+func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
 // EnsureLogstore 登记一个 logstore（已存在时什么也不做）。
 func (s *Store) EnsureLogstore(ctx context.Context, project, logstore string) error {
 	key := project + "/" + logstore
@@ -428,8 +459,14 @@ func (s *Store) Logstore(ctx context.Context, project, logstore string) (Logstor
 	return i, err == nil, err
 }
 
+// ErrReadOnly 是查询节点收到写入。
+var ErrReadOnly = errors.New("this node only serves queries")
+
 // Append 写入一个日志组，返回后即可查到。
 func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) error {
+	if s.readOnly {
+		return ErrReadOnly
+	}
 	if len(g.Logs) == 0 {
 		return nil
 	}

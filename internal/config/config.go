@@ -19,8 +19,17 @@ import (
 //	      keys:
 //	        level: {type: text, token: [...], doc_value: true}
 //	        cost_ms: {type: long, doc_value: true}
+//	access_keys:          # 设置后校验请求签名（v1）；省略时不校验（本地开发）
+//	  - {id: LTAI..., secret: ...}
 type Config struct {
-	Logstores []Logstore `json:"logstores"`
+	Logstores  []Logstore  `json:"logstores"`
+	AccessKeys []AccessKey `json:"access_keys"`
+}
+
+// AccessKey 是允许访问的一对 AccessKey。
+type AccessKey struct {
+	ID     string `json:"id"`
+	Secret string `json:"secret"`
 }
 
 // Logstore 是一个预建的 logstore 及其索引。
@@ -58,6 +67,11 @@ func Load(path string) (*Config, error) {
 					return nil, fmt.Errorf("%s: %s: index key %q has unknown type %q", path, key, name, k.Type)
 				}
 			}
+		}
+	}
+	for i, k := range c.AccessKeys {
+		if k.ID == "" || k.Secret == "" {
+			return nil, fmt.Errorf("%s: access_keys[%d]: id and secret are required", path, i)
 		}
 	}
 	return &c, nil

@@ -26,7 +26,7 @@ func (s *Server) getIndex(w http.ResponseWriter, r *http.Request, project string
 	if ix.Auto {
 		names, err := s.store.FieldNames(r.Context(), project, logstore, s.now().Add(-autoIndexWindow).Unix())
 		if err != nil {
-			s.fail(w, r, http.StatusInternalServerError, "InternalServerError", err.Error())
+			s.failInternal(w, r, err)
 			return
 		}
 		sort.Strings(names)

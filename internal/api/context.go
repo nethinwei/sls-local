@@ -40,7 +40,7 @@ func (s *Server) getContextLogs(w http.ResponseWriter, r *http.Request, project 
 		return
 	}
 	if err != nil {
-		s.fail(w, r, http.StatusInternalServerError, "InternalServerError", err.Error())
+		s.failInternal(w, r, err)
 		return
 	}
 	var b bytes.Buffer

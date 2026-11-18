@@ -78,8 +78,10 @@ func (s *Store) ensureLocal(ctx context.Context, local string) error {
 	r.mu.Unlock()
 	close(c.done)
 	if c.err != nil {
+		s.stats.downloadFailures.Add(1)
 		return fmt.Errorf("download segment: %w", c.err)
 	}
+	s.stats.downloads.Add(1)
 	return nil
 }
 
@@ -122,8 +124,10 @@ func (s *Store) upload(ctx context.Context) error {
 	for _, p := range todo {
 		for _, f := range []string{p + ".bloom", p} {
 			if err := r.obj.Put(ctx, s.objectKey(f), f); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				s.stats.uploadFailures.Add(1)
 				return fmt.Errorf("upload %s: %w", s.objectKey(f), err)
 			}
+			s.stats.uploads.Add(1)
 		}
 		r.mu.Lock()
 		delete(r.pending, p)
@@ -240,6 +244,57 @@ func (s *Store) evict() error {
 	return nil
 }
 
+// owns 判断分段是不是这个节点写的（只有写入节点删、合并自己的分段；查询节点什么也不删）。
+func (s *Store) owns(g segment) bool { return !s.readOnly && writerOf(g.seqMin) == s.writerID }
+
+// registerLogstores 按分段补登记 logstore（登记在本地库里，换了磁盘、查询节点都要从分段得知），
+// 创建时间取最早的日志。
+func (s *Store) registerLogstores(ctx context.Context, segs []segment) error {
+	created := map[[2]string]int64{}
+	for _, g := range segs {
+		k := [2]string{g.project, g.logstore}
+		if c, ok := created[k]; !ok || g.tmin < c {
+			created[k] = g.tmin
+		}
+	}
+	for k, c := range created {
+		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO logstores VALUES (?, ?, ?)`, k[0], k[1], c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// refresh 是查询节点定期做的：重新列出对象存储上的分段，换上新的快照，淘汰本地缓存。
+func (s *Store) refresh(ctx context.Context) error {
+	segs, err := s.remoteSegments(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.registerLogstores(ctx, segs); err != nil {
+		return err
+	}
+	s.publish(&snapshot{segs: segs}, nil)
+	return s.evict()
+}
+
+// refresher 在后台定期 refresh，直到 ctx 结束。
+func (s *Store) refresher(ctx context.Context, interval time.Duration) {
+	defer close(s.flusherDone)
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		if err := s.refresh(ctx); err != nil && ctx.Err() == nil && s.onError != nil {
+			s.onError(fmt.Errorf("refresh segments: %w", err))
+		}
+	}
+}
+
 // maintainRemote 重试上传、删除到期的对象、淘汰本地缓存（刷段线程定期调用）。
 func (s *Store) maintainRemote(ctx context.Context) error {
 	if s.remote == nil {
@@ -251,8 +306,8 @@ func (s *Store) maintainRemote(ctx context.Context) error {
 	return errors.Join(err, s.emptyTrash(ctx), s.evict())
 }
 
-// remoteSegments 列出对象存储上的分段（本地路径形式），去掉被别的分段包含的（合并后没来得及删的旧分段，
-// 顺带从对象存储删掉）。
+// remoteSegments 列出对象存储上的分段（本地路径形式），去掉被别的分段包含的（合并后没来得及删的旧分段；
+// 是自己写的就顺带从对象存储删掉）。
 func (s *Store) remoteSegments(ctx context.Context) ([]segment, error) {
 	keys, err := s.remote.obj.List(ctx, "")
 	if err != nil {
@@ -269,9 +324,11 @@ func (s *Store) remoteSegments(ctx context.Context) ([]segment, error) {
 	kept := segs[:0]
 	for _, g := range segs {
 		if n := len(kept); n > 0 && samePartition(kept[n-1], g) && g.seqMax <= kept[n-1].seqMax {
-			for _, k := range []string{s.objectKey(g.path), s.objectKey(g.path + ".bloom")} {
-				if err := s.remote.obj.Delete(ctx, k); err != nil {
-					return nil, err
+			if s.owns(g) {
+				for _, k := range []string{s.objectKey(g.path), s.objectKey(g.path + ".bloom")} {
+					if err := s.remote.obj.Delete(ctx, k); err != nil {
+						return nil, err
+					}
 				}
 			}
 			continue

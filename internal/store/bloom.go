@@ -266,10 +266,15 @@ func (s *Store) mayContain(g *segment, need *query.Need) bool {
 	if f == nil {
 		return true
 	}
-	return need.Eval(func(sig, word string) bool {
+	ok := need.Eval(func(sig, word string) bool {
 		b, ok := f.blooms[sig]
 		return !ok || b.has(word)
 	})
+	s.stats.bloomChecked.Add(1)
+	if !ok {
+		s.stats.bloomSkipped.Add(1)
+	}
+	return ok
 }
 
 // colsOf 是分段写成独立列的字段：刚写的分段带着，其余从旁路文件读（读不到时为空，字段全从 JSON 取）。

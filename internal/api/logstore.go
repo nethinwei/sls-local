@@ -20,7 +20,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request, project stri
 func (s *Server) listLogstores(w http.ResponseWriter, r *http.Request, project string) {
 	all, err := s.store.Logstores(r.Context(), project)
 	if err != nil {
-		s.fail(w, r, http.StatusInternalServerError, "InternalServerError", err.Error())
+		s.failInternal(w, r, err)
 		return
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -52,7 +52,7 @@ func (s *Server) getLogstore(w http.ResponseWriter, r *http.Request, project str
 	}
 	info, ok, err := s.store.Logstore(r.Context(), project, name)
 	if err != nil {
-		s.fail(w, r, http.StatusInternalServerError, "InternalServerError", err.Error())
+		s.failInternal(w, r, err)
 		return
 	}
 	if !ok {

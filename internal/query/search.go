@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/nethinwei/sls-local/internal/fieldcol"
 	"github.com/nethinwei/sls-local/internal/index"
 )
 
@@ -50,7 +51,8 @@ const (
 )
 
 // valueExpr 返回字段在 logs 表上的取值表达式（VARCHAR，字段不存在时为 NULL）。
-// __topic__、__source__ 是列；__tag__:x 在 tags 里；其余字段在 contents 里；path 是 JSON 字段的子键。
+// __topic__、__source__ 是列；__tag__:x 在 tags 里；其余字段是存储层提供的字段列（fieldcol）；
+// path 是 JSON 字段的子键。
 func valueExpr(name string, path []string) (string, []any) {
 	var expr string
 	var args []any
@@ -60,11 +62,11 @@ func valueExpr(name string, path []string) (string, []any) {
 	case "__source__":
 		expr = "source"
 	default:
-		col := "contents"
 		if strings.HasPrefix(name, "__tag__:") {
-			col = "tags"
+			expr, args = "json_extract_string(tags, ?)", []any{jsonPath(name)}
+		} else {
+			expr = fieldcol.Ref(name)
 		}
-		expr, args = "json_extract_string("+col+", ?)", []any{jsonPath(name)}
 	}
 	if len(path) > 0 {
 		// 嵌套路径 $."a"."b"；字段值不是合法 JSON 时为 NULL（DuckDB 会报错）
@@ -738,8 +740,8 @@ func (c *compiler) textMatch(expr string, exprArgs []any, f *index.Field, t term
 	conds := make([]string, len(pats))
 	for i, pat := range pats {
 		match := "coalesce(regexp_matches(" + expr + ", ?), false)"
-		// 直接取列的（全文、__topic__、__source__）先用子串查找排除大部分行，正则只跑剩下的（约快一倍）。
-		// 正则匹配时其中的每个字面片段都必然出现在文本里，所以不会漏。JSON 字段上不加：再取一遍值比正则还贵。
+		// 直接取列的（全文、__topic__、__source__、字段列）先用子串查找排除大部分行，正则只跑剩下的（约快一倍）。
+		// 正则匹配时其中的每个字面片段都必然出现在文本里，所以不会漏。tag 上不加：再取一遍 JSON 比正则还贵。
 		if len(exprArgs) == 0 && pat.literal != "" {
 			c.args = append(c.args, pat.literal, pat.re)
 			conds[i] = "(contains(" + expr + ", ?) AND " + match + ")"

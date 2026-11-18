@@ -11,6 +11,7 @@ import (
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 
+	"github.com/nethinwei/sls-local/internal/fieldcol"
 	"github.com/nethinwei/sls-local/internal/index"
 )
 
@@ -72,28 +73,31 @@ func devIndex(t *testing.T) *index.Index {
 
 func TestSearchCompile(t *testing.T) {
 	ix := devIndex(t)
-	text := "coalesce(regexp_matches(lower(json_extract_string(contents, ?)), ?), false)"
+	f := fieldcol.Ref // 字段列（存储层提供）
+	text := func(key string) string {
+		return "(contains(lower(" + f(key) + "), ?) AND coalesce(regexp_matches(lower(" + f(key) + "), ?), false))"
+	}
 	cases := []struct {
 		in, sql string
 		nargs   int
 	}{
 		{"", "TRUE", 0},
 		{"*", "TRUE", 0},
-		{"level: ERROR", text, 2},
-		{"Level:ERROR", text, 2},
+		{"level: ERROR", text("level"), 2},
+		{"Level:ERROR", text("level"), 2},
 		{"error", "(contains(lower(fulltext), ?) AND coalesce(regexp_matches(lower(fulltext), ?), false))", 2},
 		{"order paid", "((contains(lower(fulltext), ?) AND coalesce(regexp_matches(lower(fulltext), ?), false)) AND (contains(lower(fulltext), ?) AND coalesce(regexp_matches(lower(fulltext), ?), false)))", 4},
-		{"level: a and msg: b", "(" + text + " AND " + text + ")", 4},
-		{"level: a not msg: b", "(" + text + " AND (NOT " + text + "))", 4},
-		{"level: a or not msg: b", "(" + text + " OR (NOT " + text + "))", 4},
-		{"uid: *", "(json_extract_string(contents, ?) IS NOT NULL)", 1},
+		{"level: a and msg: b", "(" + text("level") + " AND " + text("msg") + ")", 4},
+		{"level: a not msg: b", "(" + text("level") + " AND (NOT " + text("msg") + "))", 4},
+		{"level: a or not msg: b", "(" + text("level") + " OR (NOT " + text("msg") + "))", 4},
+		{"uid: *", "(" + f("uid") + " IS NOT NULL)", 0},
 		{"__topic__: x", "(contains(lower(topic), ?) AND coalesce(regexp_matches(lower(topic), ?), false))", 2},
 		// 没有索引的 tag 按整个值匹配（golden：__tag__:__path__: /var/log/app/audit.log 命中，: audit 不命中）
 		{"__tag__:__path__: x", "coalesce(regexp_matches(json_extract_string(tags, ?), ?), false)", 2},
-		{"cost_ms > 50", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS BIGINT) > ?, false)", 2},
-		{"cost_ms: 68", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS BIGINT) = ?, false)", 2},
-		{"cost_ms in (50 60]", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS BIGINT) > ? AND TRY_CAST(json_extract_string(contents, ?) AS BIGINT) <= ?, false)", 4},
-		{"elapsed_ms > 1.5", "coalesce(TRY_CAST(json_extract_string(contents, ?) AS DOUBLE) > ?, false)", 2},
+		{"cost_ms > 50", "coalesce(TRY_CAST(" + f("cost_ms") + " AS BIGINT) > ?, false)", 1},
+		{"cost_ms: 68", "coalesce(TRY_CAST(" + f("cost_ms") + " AS BIGINT) = ?, false)", 1},
+		{"cost_ms in (50 60]", "coalesce(TRY_CAST(" + f("cost_ms") + " AS BIGINT) > ? AND TRY_CAST(" + f("cost_ms") + " AS BIGINT) <= ?, false)", 2},
+		{"elapsed_ms > 1.5", "coalesce(TRY_CAST(" + f("elapsed_ms") + " AS DOUBLE) > ?, false)", 1},
 		{"cost_ms: abc", "FALSE", 0},
 		{"cost_ms: 6*", "FALSE", 0},
 		{"level > a", "FALSE", 0},
@@ -201,12 +205,13 @@ func TestTextPatterns(t *testing.T) {
 }
 
 func TestExpr(t *testing.T) {
+	f := fieldcol.Ref
 	cases := []struct{ in, sql string }{
-		{"cost_ms > '50'", "(json_extract_string(contents, ?) > '50')"},
+		{"cost_ms > '50'", "(" + f("cost_ms") + " > '50')"},
 		{`"__tag__:__path__" like '%order%'`, "(json_extract_string(tags, ?) like '%order%')"},
-		{"cast(cost_ms as bigint) > 50", "(cast(json_extract_string(contents, ?) as bigint) > 50)"},
-		{"__time__ > 0 and nosuch is null", "(t > 0 and json_extract_string(contents, ?) is null)"},
-		{"regexp_like(msg, 'a''b')", "(regexp_matches(json_extract_string(contents, ?), 'a''b'))"},
+		{"cast(cost_ms as bigint) > 50", "(cast(" + f("cost_ms") + " as bigint) > 50)"},
+		{"__time__ > 0 and nosuch is null", "(t > 0 and " + f("nosuch") + " is null)"},
+		{"regexp_like(msg, 'a''b')", "(regexp_matches(" + f("msg") + ", 'a''b'))"},
 	}
 	for _, c := range cases {
 		got, err := Expr(c.in)

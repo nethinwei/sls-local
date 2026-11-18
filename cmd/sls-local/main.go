@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -38,6 +39,9 @@ func main() {
 		httpAddr  = flag.String("http", ":8080", "HTTP 监听地址（查询端：Grafana 插件、SDK）")
 		httpsAddr = flag.String("https", ":443", "HTTPS 监听地址，自签证书（写入端：LoongCollector 只走 443）；为空时不监听")
 		dataPath  = flag.String("data", "/data/sls.duckdb", "DuckDB 数据文件；为空时使用内存库")
+		segDir    = flag.String("segments", "", "Parquet 分段目录，默认是数据文件旁的 segments/；内存库时不刷段")
+		flushInt  = flag.Duration("flush-interval", store.DefaultFlushInterval, "刷段间隔：把新写入的日志写成 Parquet 分段")
+		flushRows = flag.Int64("flush-rows", store.DefaultFlushRows, "新写入的日志积累到这么多条时提前刷段")
 		ttl       = flag.Duration("ttl", 72*time.Hour, "日志保留时长，按 __time__ 删除；0 表示不删除")
 		cfgPath   = flag.String("config", "", "配置文件（YAML）：预建 logstore 并声明索引，格式见 internal/config")
 		sqlOffset = flag.Duration("sql-utc-offset", store.DefaultSQLOffset, "SQL 时间函数（from_unixtime、date_format、now）使用的时区偏移，SLS 默认东八区")
@@ -54,24 +58,29 @@ func main() {
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	opts := store.Options{SQLOffset: *sqlOffset, SegmentDir: *segDir, FlushInterval: *flushInt, FlushRows: *flushRows,
+		OnError: func(err error) { log.Warn("segments", "error", err) }}
+	if opts.SegmentDir == "" && *dataPath != "" {
+		opts.SegmentDir = filepath.Join(filepath.Dir(*dataPath), "segments")
+	}
 	if *reindex {
-		if err := runReindex(log, *dataPath, *cfgPath, *sqlOffset); err != nil {
+		if err := runReindex(log, *dataPath, *cfgPath, opts); err != nil {
 			log.Error("reindex failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
-	if err := run(log, *httpAddr, *httpsAddr, *dataPath, *cfgPath, *ttl, *sqlOffset, stores); err != nil {
+	if err := run(log, *httpAddr, *httpsAddr, *dataPath, *cfgPath, *ttl, opts, stores); err != nil {
 		log.Error("sls-local exited", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl, sqlOffset time.Duration, stores []string) error {
+func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl time.Duration, opts store.Options, stores []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	st, err := store.Open(ctx, dataPath, store.Options{SQLOffset: sqlOffset})
+	st, err := store.Open(ctx, dataPath, opts)
 	if err != nil {
 		return err
 	}
@@ -130,7 +139,8 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl, s
 			}
 		}()
 	}
-	log.Info("sls-local started", "version", version, "http", httpAddr, "https", httpsAddr, "data", dataPath, "ttl", ttl.String(),
+	log.Info("sls-local started", "version", version, "http", httpAddr, "https", httpsAddr, "data", dataPath,
+		"segments", opts.SegmentDir, "ttl", ttl.String(),
 		"config", cfgPath, "indexed_logstores", len(indexes))
 
 	if ttl > 0 {
@@ -199,14 +209,14 @@ func numericKeys(indexes map[string]*sls.Index) func(project, logstore string) m
 }
 
 // runReindex 按当前索引配置重建全文列。
-func runReindex(log *slog.Logger, dataPath, cfgPath string, sqlOffset time.Duration) error {
+func runReindex(log *slog.Logger, dataPath, cfgPath string, opts store.Options) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	indexes, _, err := loadIndexes(cfgPath)
 	if err != nil {
 		return err
 	}
-	st, err := store.Open(ctx, dataPath, store.Options{SQLOffset: sqlOffset})
+	st, err := store.Open(ctx, dataPath, opts)
 	if err != nil {
 		return err
 	}
@@ -214,6 +224,9 @@ func runReindex(log *slog.Logger, dataPath, cfgPath string, sqlOffset time.Durat
 	start := time.Now()
 	n, err := st.RebuildFulltext(ctx, numericKeys(indexes), true)
 	if err != nil {
+		return err
+	}
+	if _, err := st.Flush(ctx); err != nil { // 重建时分段读回了头部，写回分段
 		return err
 	}
 	log.Info("rebuilt full-text column", "rows", n, "elapsed", time.Since(start).String())

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nethinwei/sls-local/internal/fieldcol"
 	"github.com/nethinwei/sls-local/internal/query"
 )
 
@@ -35,14 +36,41 @@ type SearchResult struct {
 	LastTime int64    // 最后一行的 __time__（没有行时为 0）
 }
 
+// source 是检索范围（project、logstore、时间）在快照里的数据，作为 FROM 后面的表，带上 extra 与检索条件、
+// SPL 用到的字段列。
+func (p *SearchParams) source(sn *snapshot, extra ...string) string {
+	return sn.source(p.Project, p.Logstore, p.From, p.To, p.keys(extra...))
+}
+
+// keys 是检索条件、SPL 与 extra 里用到的字段（fieldcol）。
+func (p *SearchParams) keys(extra ...string) []string {
+	sqls := append([]string{p.Where.SQL}, extra...)
+	for _, st := range p.Stages {
+		sqls = append(sqls, st.SQL)
+	}
+	return fieldcol.Keys(sqls...)
+}
+
+// where 是 [From.FromNs, To.ToNs) 与检索条件。纳秒部分为 0 时（整秒的范围，绝大多数查询）只是 t 上的区间：
+// 按纳秒比较的 OR 条件要逐行算，分段上 200 万条要多花约 6 ms。单独的区间条件还能用上按块的 min/max 剪枝。
 func (p *SearchParams) where() (string, []any) {
-	// t BETWEEN 与后两行重复，但 OR 条件用不上 DuckDB 按块的 min/max 剪枝，单独的区间条件可以
-	where := `project = ? AND logstore = ? AND t BETWEEN ? AND ?
-		AND (t > ? OR (t = ? AND coalesce(ns, 0) >= ?))
-		AND (t < ? OR (t = ? AND coalesce(ns, 0) < ?))
-		AND ` + p.Where.SQL
-	args := []any{p.Project, p.Logstore, p.From, p.To, p.From, p.From, p.FromNs, p.To, p.To, p.ToNs}
-	return where, append(args, p.Where.Args...)
+	where := "project = ? AND logstore = ?"
+	args := []any{p.Project, p.Logstore}
+	if p.FromNs == 0 {
+		where += " AND t >= ?"
+		args = append(args, p.From)
+	} else {
+		where += " AND t >= ? AND (t > ? OR coalesce(ns, 0) >= ?)"
+		args = append(args, p.From, p.From, p.FromNs)
+	}
+	if p.ToNs == 0 {
+		where += " AND t < ?"
+		args = append(args, p.To)
+	} else {
+		where += " AND t <= ? AND (t < ? OR coalesce(ns, 0) < ?)"
+		args = append(args, p.To, p.To, p.ToNs)
+	}
+	return where + " AND " + p.Where.SQL, append(args, p.Where.Args...)
 }
 
 // Search 按条件检索日志。
@@ -51,12 +79,18 @@ func (p *SearchParams) where() (string, []any) {
 // 凑够一页，所以按时间切成互不重叠的窗口，从排在前面的一端逐个查，凑够就停（SLS 也会提前停止扫描）。
 // 窗口之间按 t 有序，各窗口的结果依次拼接就是整体排序的结果；命中很少时每行也只扫一次。
 func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, error) {
+	sn := s.acquire()
+	defer s.release(sn)
 	where, args := p.where()
 	order := "ASC"
 	if p.Reverse {
 		order = "DESC"
 	}
-	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys FROM logs WHERE `+where+
+	fields := ""
+	for _, k := range p.keys() { // SPL 的 where、extend 引用字段列
+		fields += ", " + fieldcol.Ref(k)
+	}
+	src, ext := splSource(`SELECT seq, t, ns, topic, source, tags, contents, pack_n, pack_i, orig_keys`+fields+` FROM `+p.source(sn)+` WHERE `+where+
 		` AND t BETWEEN ? AND ?`, p.Stages)
 	extCols := ""
 	for _, c := range ext {
@@ -79,8 +113,34 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	res := &SearchResult{}
 	keys := newKeySet()
 	limit, offset := p.Limit, p.Offset
+	// add 把取到的一行加进结果
+	add := func(r row, origKeys sql.NullString, extVals []any) {
+		res.LastTime = r.t
+		if assemble {
+			splRows = append(splRows, (&r).assemble(p.Stages, extVals, p.PackMeta))
+			return
+		}
+		res.Rows = append(res.Rows, r.encode(searchLayout, p.PackMeta, 0))
+		if origKeys.Valid { // 有重复字段名：SLS 的 keys 列的是原始字段名，不含改名产生的
+			var names []string
+			_ = json.Unmarshal([]byte(origKeys.String), &names)
+			keys.add(names...)
+		} else {
+			keys.addObject(r.contents)
+		}
+		if p.PackMeta {
+			keys.add("__pack_meta__")
+		}
+		keys.add("__topic__", "__source__")
+		keys.addObject(r.tags)
+	}
 	// scan 取窗口 [lo, hi] 里的一页，返回取到的行数
+	// 分两步取只对 Parquet 分段划算：头部是 DuckDB 的表，读 contents 很便宜，多一次查询反而慢
+	late := len(ext) == 0 && sn.hasSegments(p.Project, p.Logstore, p.From, p.To)
 	scan := func(lo, hi, limit, offset int64) (int64, error) {
+		if late {
+			return s.scanLate(ctx, tx, sn, p, src, order, append(args, lo, hi, limit, offset), add)
+		}
 		rows, err := tx.QueryContext(ctx, q, append(args, lo, hi, limit, offset)...)
 		if err != nil {
 			return 0, queryError(err)
@@ -99,25 +159,7 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 			if err := rows.Scan(dest...); err != nil {
 				return 0, err
 			}
-			res.LastTime = r.t
-			if assemble {
-				rr := r
-				splRows = append(splRows, (&rr).assemble(p.Stages, extVals, p.PackMeta))
-				continue
-			}
-			res.Rows = append(res.Rows, r.encode(searchLayout, p.PackMeta, 0))
-			if origKeys.Valid { // 有重复字段名：SLS 的 keys 列的是原始字段名，不含改名产生的
-				var names []string
-				_ = json.Unmarshal([]byte(origKeys.String), &names)
-				keys.add(names...)
-			} else {
-				keys.addObject(r.contents)
-			}
-			if p.PackMeta {
-				keys.add("__pack_meta__")
-			}
-			keys.add("__topic__", "__source__")
-			keys.addObject(r.tags)
+			add(r, origKeys, extVals)
 		}
 		if err := rows.Err(); err != nil {
 			return 0, queryError(err)
@@ -161,11 +203,78 @@ func (s *Store) Search(ctx context.Context, p SearchParams) (*SearchResult, erro
 	return res, nil
 }
 
+// scanLate 分两步取一页（延迟物化）：先只按排序列排出这一页的 seq，再按 seq 取这几行的内容。一步取的话，
+// 排序前要把窗口里所有命中行的 contents、tags 都读出来解压，窗口越大越亏。没有 extend 新增列时才这样取。
+func (s *Store) scanLate(ctx context.Context, tx *sql.Tx, sn *snapshot, p SearchParams, src, order string, args []any,
+	add func(row, sql.NullString, []any)) (int64, error) {
+	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`SELECT seq, t FROM (%s) ORDER BY t %s, coalesce(ns, 0) %s, seq %s
+		LIMIT ? OFFSET ?`, src, order, order, order), args...)
+	if err != nil {
+		return 0, queryError(err)
+	}
+	var seqs []int64
+	tlo, thi := int64(math.MaxInt64), int64(math.MinInt64)
+	for rows.Next() {
+		var seq, t int64
+		if err := rows.Scan(&seq, &t); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		seqs = append(seqs, seq)
+		tlo, thi = min(tlo, t), max(thi, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, queryError(err)
+	}
+	if len(seqs) == 0 {
+		return 0, nil
+	}
+	list := make([]string, len(seqs))
+	for i, seq := range seqs {
+		list[i] = strconv.FormatInt(seq, 10)
+	}
+	rows, err = tx.QueryContext(ctx, `SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0), orig_keys
+		FROM `+sn.source(p.Project, p.Logstore, tlo, thi, nil)+`
+		WHERE project = ? AND logstore = ? AND t BETWEEN ? AND ? AND seq IN (`+strings.Join(list, ", ")+`)`,
+		p.Project, p.Logstore, tlo, thi)
+	if err != nil {
+		return 0, queryError(err)
+	}
+	defer rows.Close()
+	type fetched struct {
+		r        row
+		origKeys sql.NullString
+	}
+	bySeq := make(map[int64]fetched, len(seqs))
+	for rows.Next() {
+		var f fetched
+		if err := rows.Scan(&f.r.seq, &f.r.t, &f.r.ns, &f.r.topic, &f.r.source, &f.r.tags, &f.r.contents,
+			&f.r.packN, &f.r.packI, &f.origKeys); err != nil {
+			return 0, err
+		}
+		bySeq[f.r.seq] = f
+	}
+	if err := rows.Err(); err != nil {
+		return 0, queryError(err)
+	}
+	for _, seq := range seqs {
+		f, ok := bySeq[seq]
+		if !ok { // 同一个事务里的快照，不会发生
+			return 0, fmt.Errorf("log %d disappeared between the two steps of a search", seq)
+		}
+		add(f.r, f.origKeys, nil)
+	}
+	return int64(len(seqs)), nil
+}
+
 // Count 数时间范围内满足条件的日志条数。
 func (s *Store) Count(ctx context.Context, p SearchParams) (int64, error) {
+	sn := s.acquire()
+	defer s.release(sn)
 	where, args := p.where()
 	var n int64
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM logs WHERE `+where, args...).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+p.source(sn)+` WHERE `+where, args...).Scan(&n); err != nil {
 		return 0, queryError(err)
 	}
 	return n, nil
@@ -348,20 +457,23 @@ func EncodeCursor(seq int64) string {
 
 // Cursor 是 GetCursor：begin 是最早一条的序号，end 是最新一条之后，Unix 秒是该时间之后最早的一条。
 func (s *Store) Cursor(ctx context.Context, project, logstore, from string) (int64, error) {
+	sn := s.acquire()
+	defer s.release(sn)
+	logs := sn.source(project, logstore, 0, math.MaxInt64, nil)
 	var q string
 	var args []any
 	switch from {
 	case "begin":
-		q = `SELECT coalesce(min(seq), 0) FROM logs WHERE project = ? AND logstore = ?`
+		q = `SELECT coalesce(min(seq), 0) FROM ` + logs + ` WHERE project = ? AND logstore = ?`
 	case "end":
-		q = `SELECT coalesce(max(seq), 0) + 1 FROM logs WHERE project = ? AND logstore = ?`
+		q = `SELECT coalesce(max(seq), 0) + 1 FROM ` + logs + ` WHERE project = ? AND logstore = ?`
 	default:
 		t, err := strconv.ParseInt(from, 10, 64)
 		if err != nil {
 			return 0, fmt.Errorf("from must be begin, end or unix seconds")
 		}
-		q = `SELECT coalesce(min(seq), (SELECT coalesce(max(seq), 0) + 1 FROM logs WHERE project = ? AND logstore = ?))
-			FROM logs WHERE project = ? AND logstore = ? AND t >= ?`
+		q = `SELECT coalesce(min(seq), (SELECT coalesce(max(seq), 0) + 1 FROM ` + logs + ` WHERE project = ? AND logstore = ?))
+			FROM ` + logs + ` WHERE project = ? AND logstore = ? AND t >= ?`
 		args = []any{project, logstore}
 		args = append(args, project, logstore, t)
 		var seq int64
@@ -436,21 +548,44 @@ type ContextResult struct {
 
 // Context 取锚点（写入序号 seq）前后同一来源的日志：同一 pack_id 前缀，按写入顺序。
 func (s *Store) Context(ctx context.Context, project, logstore string, seq int64, back, forward int) (*ContextResult, error) {
+	sn := s.acquire()
+	defer s.release(sn)
 	var packCtx sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT pack_ctx FROM logs WHERE project = ? AND logstore = ? AND seq = ?`,
-		project, logstore, seq).Scan(&packCtx)
+	err := s.db.QueryRowContext(ctx, `SELECT pack_ctx FROM `+sn.sourceSeq(project, logstore, seq, seq)+
+		` WHERE project = ? AND logstore = ? AND seq = ?`, project, logstore, seq).Scan(&packCtx)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !packCtx.Valid) {
 		return nil, ErrNoContext
 	}
 	if err != nil {
 		return nil, err
 	}
-	const cols = `SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0) FROM logs WHERE project = ? AND logstore = ? AND pack_ctx = ?`
-	before, err := s.scanRows(ctx, cols+` AND seq < ? ORDER BY seq DESC LIMIT ?`, project, logstore, packCtx.String, seq, back)
+	// 同一来源的日志在写入序号上通常挨得很近：先在锚点附近的 seq 范围里找，不够再扩大，最后才扫整个 logstore。
+	// 范围内按 seq 排序取最近的几条；范围外的离锚点更远，所以凑够了就是最终结果。
+	near := func(lo, hi int64, order string, limit int) ([]row, error) {
+		var out []row
+		for _, w := range []int64{10_000, 1_000_000, math.MaxInt64} {
+			l, h := max(lo, seq-w), min(hi, seq+w)
+			if w == math.MaxInt64 {
+				l, h = lo, hi
+			}
+			q := `SELECT seq, t, ns, topic, source, tags, contents, coalesce(pack_n, 1), coalesce(pack_i, 0) FROM ` +
+				sn.sourceSeq(project, logstore, l, h) + ` WHERE project = ? AND logstore = ? AND pack_ctx = ?
+				AND seq BETWEEN ? AND ? ORDER BY seq ` + order + ` LIMIT ?`
+			var err error
+			if out, err = s.scanRows(ctx, q, project, logstore, packCtx.String, l, h, limit); err != nil {
+				return nil, err
+			}
+			if len(out) >= limit || (l == lo && h == hi) {
+				break
+			}
+		}
+		return out, nil
+	}
+	before, err := near(0, seq-1, "DESC", back)
 	if err != nil {
 		return nil, err
 	}
-	rest, err := s.scanRows(ctx, cols+` AND seq >= ? ORDER BY seq ASC LIMIT ?`, project, logstore, packCtx.String, seq, forward+1)
+	rest, err := near(seq, math.MaxInt64, "ASC", forward+1)
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +621,10 @@ func (s *Store) scanRows(ctx context.Context, q string, args ...any) ([]row, err
 // Histogram 按 interval 秒分桶计数，返回 桶起点（对齐到 interval 的整数倍）→ 条数。
 // 时间范围 [from, to) 只按秒计（与 SLS 的 GetHistograms 一致）。
 func (s *Store) Histogram(ctx context.Context, project, logstore string, from, to, interval int64, where query.Cond) (map[int64]int64, error) {
-	q := `SELECT t - t % ? AS b, count(*) FROM logs WHERE project = ? AND logstore = ? AND t >= ? AND t < ? AND ` +
+	sn := s.acquire()
+	defer s.release(sn)
+	q := `SELECT t - t % ? AS b, count(*) FROM ` + sn.source(project, logstore, from, to, fieldcol.Keys(where.SQL)) +
+		` WHERE project = ? AND logstore = ? AND t >= ? AND t < ? AND ` +
 		where.SQL + ` GROUP BY b`
 	args := append([]any{interval, project, logstore, from, to}, where.Args...)
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -509,9 +647,12 @@ func (s *Store) Histogram(ctx context.Context, project, logstore string, from, t
 
 // FieldNames 返回 since 之后写入的日志里出现过的字段名与 tag 名（自动索引的 GetIndex 用）。
 func (s *Store) FieldNames(ctx context.Context, project, logstore string, since int64) ([]string, error) {
+	sn := s.acquire()
+	defer s.release(sn)
+	logs := sn.source(project, logstore, since, math.MaxInt64, nil)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT unnest(json_keys(contents)) FROM logs WHERE project = ? AND logstore = ? AND t >= ?
-		UNION SELECT DISTINCT unnest(json_keys(tags)) FROM logs WHERE project = ? AND logstore = ? AND t >= ?`,
+		SELECT DISTINCT unnest(json_keys(contents)) FROM `+logs+` WHERE project = ? AND logstore = ? AND t >= ?
+		UNION SELECT DISTINCT unnest(json_keys(tags)) FROM `+logs+` WHERE project = ? AND logstore = ? AND t >= ?`,
 		project, logstore, since, project, logstore, since)
 	if err != nil {
 		return nil, err

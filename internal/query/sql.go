@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nethinwei/sls-local/internal/fieldcol"
 	"github.com/nethinwei/sls-local/internal/index"
 )
 
@@ -56,13 +57,18 @@ const (
 )
 
 // CTE 返回 WITH log AS (...) 的定义：base 是 logs 表上的过滤条件（project、时间范围、检索）。
-func CTE(base string) string { return "WITH " + CTEDef("log", base) + " " }
+func CTE(base string) string { return "WITH " + CTEDef("log", "logs", base, nil) + " " }
 
 // CTEDef 是一个 log 形式的表定义：name AS (...)。compare 的 log__shift_<n> 也用它。
-func CTEDef(name, base string) string {
+// from 是数据所在的表（logs，或头部与分段合起来的子查询），keys 是语句用到的字段（fieldcol），原样带出。
+func CTEDef(name, from, base string, keys []string) string {
+	var fields strings.Builder
+	for _, k := range keys {
+		fields.WriteString(", " + fieldcol.Ref(k))
+	}
 	return name + " AS (SELECT t AS " + colTime + ", ns AS " + colNs + ", topic AS " + colTopic +
-		", source AS " + colSource + ", tags AS " + colTags + ", contents AS " + colContents +
-		" FROM logs WHERE " + base + ")"
+		", source AS " + colSource + ", tags AS " + colTags + ", contents AS " + colContents + fields.String() +
+		" FROM " + from + " WHERE " + base + ")"
 }
 
 // sqlKeywords 是原样保留的 SQL 关键字（不当作字段名）。
@@ -523,13 +529,12 @@ func (r *sqlRewriter) field(t sqlTok) (string, []any, error) {
 		}
 		return "", nil, sqlError(t.pos, "Column '%s' cannot be resolved; please add the column in the index attribute", name)
 	}
-	col := colContents
-	if strings.HasPrefix(f.Name, "__tag__:") {
-		col = colTags
-	}
 	// JSON 路径内联成字符串字面量而不是参数：同一字段在 select 与 group by 里必须写成同一个表达式，
 	// DuckDB 会把参数不同（$1、$3）的两处当成不同的表达式
-	expr := "json_extract_string(" + col + ", " + sqlString(jsonPath(f.Name)) + ")"
+	expr := fieldcol.Ref(f.Name) // 存储层提供的字段列，CTE 里原样带出
+	if strings.HasPrefix(f.Name, "__tag__:") {
+		expr = "json_extract_string(" + colTags + ", " + sqlString(jsonPath(f.Name)) + ")"
+	}
 	for _, p := range path {
 		expr = "json_extract_string(" + expr + ", " + sqlString(jsonPath(p)) + ")"
 	}

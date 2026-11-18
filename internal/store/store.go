@@ -4,12 +4,15 @@ package store
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +72,7 @@ type Group struct {
 }
 
 // Store 是 DuckDB 上的日志存储。写入经同一个 Appender 串行进行，查询走连接池。
+// 写入先进 logs 表（头部），再定期刷成 Parquet 分段（见 segment.go）。
 type Store struct {
 	db  *sql.DB
 	mu  sync.Mutex // 保护 app、conn、seq 与 known
@@ -77,19 +81,51 @@ type Store struct {
 	seq int64
 
 	known map[string]bool // 已登记的 project/logstore
+
+	// 分段
+	segDir      string
+	flushRows   int64
+	syncFlush   bool       // 测试用：行数到了就在 Append 里同步刷段
+	tempSegDir  string     // 测试用的临时分段目录，Close 时删除
+	flushMu     sync.Mutex // 刷段、保留、读回分段互斥
+	segMu       sync.Mutex // 保护 cur、live、cleanups
+	cur         *snapshot
+	live        []*snapshot // 已被替换、但还有查询在用的快照
+	cleanups    []cleanup
+	flushNow    chan struct{}
+	stopFlusher context.CancelFunc
+	flusherDone chan struct{}
+	onError     func(error)
 }
 
-// dsnOptions 关掉 DuckDB 访问外部文件与网络、安装扩展的能力：| where 与 SQL 接受用户写的表达式，
-// 不能借 read_csv 之类的函数读到宿主机上的文件。integer_division 让整数相除得整数（与 SLS/Presto 一致）。
-// lock_configuration 防止语句里用 SET 改回来。
-const dsnOptions = "?enable_external_access=false&autoinstall_known_extensions=false&autoload_known_extensions=false" +
-	"&integer_division=true&lock_configuration=true"
+// dsnOptions 关掉 DuckDB 安装扩展的能力；integer_division 让整数相除得整数（与 SLS/Presto 一致）。
+const dsnOptions = "?autoinstall_known_extensions=false&autoload_known_extensions=false&integer_division=true"
+
+// lockDown 关掉 DuckDB 访问外部文件与网络的能力：| where 与 SQL 接受用户写的表达式，不能借 read_csv 之类的
+// 函数读到宿主机上的文件。只放行分段目录（读写 Parquet 分段）。lock_configuration 防止语句里用 SET 改回来。
+// 这些是全局设置，打开数据库后、处理任何请求前执行一次。
+func lockDown(segDir string) string {
+	dirs := "[]"
+	if segDir != "" {
+		dirs = "[" + sqlQuote(segDir+string(filepath.Separator)) + "]"
+	}
+	return "SET allowed_directories = " + dirs + "; SET enable_external_access = false; " +
+		"SET parquet_metadata_cache = true; SET lock_configuration = true"
+}
 
 // Options 是存储的可选设置。
 type Options struct {
 	// SQLOffset 是 SQL 里时间函数的时区偏移：from_unixtime 返回这个时区的本地时间（不带时区），
 	// date_format、now() 同理。SLS 默认东八区。
 	SQLOffset time.Duration
+
+	// SegmentDir 是 Parquet 分段的目录；为空时不刷段，日志全部留在 logs 表里。
+	SegmentDir string
+	// FlushInterval、FlushRows 是刷段的时机：间隔到了，或头部积累的行数到了。为 0 时用默认值。
+	FlushInterval time.Duration
+	FlushRows     int64
+	// OnError 接收后台刷段、清理时的错误（可为空）。
+	OnError func(error)
 }
 
 // DefaultSQLOffset 是 SLS 的默认时区 UTC+8。
@@ -116,15 +152,28 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, fmt.Errorf("open duckdb %q: %w", path, err)
 	}
 	db := sql.OpenDB(connector)
+	s := &Store{db: db, known: map[string]bool{}, onError: opts.OnError}
+	if err := s.initSegments(&opts); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.ExecContext(ctx, lockDown(s.segDir)); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("configure duckdb: %w", err)
+	}
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
-	s := &Store{db: db, known: map[string]bool{}}
+	if s.cur, err = s.loadSegments(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := db.QueryRowContext(ctx, `SELECT coalesce(max(seq), 0) FROM logs`).Scan(&s.seq); err != nil {
 		db.Close()
 		return nil, err
 	}
+	s.seq = max(s.seq, s.cur.boundary)
 	if s.con, err = connector.Connect(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -134,7 +183,44 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if s.segDir != "" && !s.syncFlush {
+		fctx, cancel := context.WithCancel(context.Background())
+		s.stopFlusher, s.flushNow, s.flusherDone = cancel, make(chan struct{}, 1), make(chan struct{})
+		go s.flusher(fctx, cmp.Or(opts.FlushInterval, DefaultFlushInterval))
+	}
 	return s, nil
+}
+
+// initSegments 定下分段目录与刷段阈值。测试可以设 SLS_LOCAL_TEST_FLUSH_ROWS=n：没有配置分段目录时用一个
+// 临时目录，头部每满 n 行就在 Append 里同步刷段，让整套测试也覆盖「一部分在头部、一部分在分段」的情形。
+func (s *Store) initSegments(opts *Options) error {
+	s.flushRows = cmp.Or(opts.FlushRows, DefaultFlushRows)
+	if v := os.Getenv("SLS_LOCAL_TEST_FLUSH_ROWS"); v != "" && opts.SegmentDir == "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n <= 0 {
+			return fmt.Errorf("SLS_LOCAL_TEST_FLUSH_ROWS=%q: want a positive integer", v)
+		}
+		dir, err := os.MkdirTemp("", "sls-segments-")
+		if err != nil {
+			return err
+		}
+		opts.SegmentDir, s.flushRows, s.syncFlush, s.tempSegDir = dir, n, true, dir
+	}
+	if opts.SegmentDir == "" {
+		return nil
+	}
+	dir, err := filepath.Abs(opts.SegmentDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("segment directory: %w", err)
+	}
+	if dir, err = filepath.EvalSymlinks(dir); err != nil { // DuckDB 按真实路径检查 allowed_directories
+		return err
+	}
+	s.segDir = dir
+	return nil
 }
 
 // fulltextVersion 是全文列的生成规则版本：2 起包含 __source__ 与字段名、不含数值字段的值；3 起各部分以
@@ -152,6 +238,11 @@ func (s *Store) RebuildFulltext(ctx context.Context, numeric func(project, logst
 	}
 	if v.String == fulltextVersion && !force {
 		return 0, nil
+	}
+	s.flushMu.Lock() // 重建期间不刷段
+	defer s.flushMu.Unlock()
+	if err := s.unflush(ctx); err != nil { // 分段里的日志读回头部一起重建，之后再刷出去
+		return 0, err
 	}
 	s.mu.Lock() // 重建期间不接受写入
 	defer s.mu.Unlock()
@@ -204,6 +295,13 @@ func (s *Store) RebuildFulltext(ctx context.Context, numeric func(project, logst
 
 // Close 刷出未写完的数据并关闭数据库。
 func (s *Store) Close() error {
+	if s.stopFlusher != nil {
+		s.stopFlusher()
+		<-s.flusherDone
+	}
+	if s.tempSegDir != "" {
+		defer os.RemoveAll(s.tempSegDir)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err := s.app.Close()
@@ -308,18 +406,25 @@ func (s *Store) Append(ctx context.Context, project, logstore string, g *Group) 
 		enc[i].fulltext = fulltext(g.Source, fields, g.NumericKeys)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, l := range g.Logs {
-		s.seq++
-		if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), enc[i].ns, g.Topic, g.Source,
-			tagsJSON, enc[i].contents, enc[i].fulltext, packCtx, int32(len(g.Logs)), int32(i), enc[i].origKeys); err != nil {
-			return fmt.Errorf("append: %w", err)
+	seq, err := func() (int64, error) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i, l := range g.Logs {
+			s.seq++
+			if err := s.app.AppendRow(project, logstore, s.seq, int64(l.Time), enc[i].ns, g.Topic, g.Source,
+				tagsJSON, enc[i].contents, enc[i].fulltext, packCtx, int32(len(g.Logs)), int32(i), enc[i].origKeys); err != nil {
+				return 0, fmt.Errorf("append: %w", err)
+			}
 		}
+		if err := s.app.Flush(); err != nil {
+			return 0, fmt.Errorf("flush: %w", err)
+		}
+		return s.seq, nil
+	}()
+	if err != nil {
+		return err
 	}
-	if err := s.app.Flush(); err != nil {
-		return fmt.Errorf("flush: %w", err)
-	}
+	s.maybeFlush(ctx, seq)
 	return nil
 }
 
@@ -416,11 +521,13 @@ func fulltext(source string, kvs []KV, numeric map[string]bool) string {
 	return strings.Join(parts, query.FieldSeparator)
 }
 
-// DeleteBefore 删除 __time__ 早于 cutoff 的日志，返回删除条数。
+// DeleteBefore 删除 __time__ 早于 cutoff 的日志，返回删除条数。分段按整个文件删除：一个分段里最晚的日志
+// 也早于 cutoff 时才删（分段按小时划分，最多多留一小时）。
 func (s *Store) DeleteBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	r, err := s.db.ExecContext(ctx, `DELETE FROM logs WHERE t < ?`, cutoff.Unix())
 	if err != nil {
 		return 0, err
 	}
-	return r.RowsAffected()
+	n, err := r.RowsAffected()
+	return n + s.dropSegmentsBefore(cutoff.Unix()), err
 }

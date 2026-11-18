@@ -26,6 +26,7 @@ func openSeg(t *testing.T, path, dir string) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.compactQuiet = 0 // 合并测试默认按安静的分区（一次合并完）
 	return s
 }
 
@@ -526,5 +527,64 @@ func TestSegmentCompactRecovery(t *testing.T) {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Errorf("%s should have been removed", p)
 		}
+	}
+}
+
+// 还在写入的分区分层合并：同一层的攒够 compactFanIn 个才合并，合并结果不会每次刷段都被重写。
+func TestSegmentCompactTiered(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s := openSeg(t, "", dir)
+	defer s.Close()
+	s.compactQuiet = time.Hour
+	compact := func() {
+		for { // 一次合并出的文件可能又凑够了上一层
+			n, err := s.Compact(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n == 0 {
+				return
+			}
+		}
+	}
+	for i := range 8 * 8 {
+		putSeq(t, s, i, 1) // 每次刷段 1 行
+		if _, err := s.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+		compact()
+	}
+	sn := s.acquire()
+	var rows []int64
+	for _, g := range sn.segs {
+		rows = append(rows, g.rows)
+	}
+	s.release(sn)
+	// 64 个 1 行的文件：每 8 个合成一个 8 行的，8 个 8 行的再合成一个 64 行的
+	if !slices.Equal(rows, []int64{64}) {
+		t.Errorf("segment rows = %v, want [64]", rows)
+	}
+	// 每行只被重写两次：64 + 8×8 个文件合并
+	if n := s.stats.compactedFiles.Load(); n != 64+8 {
+		t.Errorf("compacted files = %d, want %d", n, 64+8)
+	}
+
+	// 安静下来后，剩下的小文件一次合并完
+	for i := range 3 {
+		putSeq(t, s, 100+i, 1)
+		if _, err := s.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := s.Compact(ctx); err != nil || n != 0 {
+		t.Fatalf("busy partition merged %d, %v", n, err)
+	}
+	s.compactQuiet = 0
+	if n, err := s.Compact(ctx); err != nil || n != 4 {
+		t.Fatalf("quiet partition merged %d, %v", n, err)
+	}
+	if got := countAll(t, s); got != 67 {
+		t.Errorf("count = %d", got)
 	}
 }

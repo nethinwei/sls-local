@@ -18,6 +18,7 @@ func openNode(t *testing.T, opts Options) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.compactQuiet = 0 // 合并测试默认按安静的分区（一次合并完）
 	return s
 }
 

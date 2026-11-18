@@ -155,9 +155,14 @@ func (s *Store) writerAlive(ctx context.Context, writerID int64) (bool, error) {
 	return r.fresh(time.Now()), nil
 }
 
-// dropAbandonedBefore 让过期的分段也能被删掉，即使写它的节点已经下线（缩容、换了编号）：分段只由写它的节点删，
-// 没有这一步的话，下线节点的分段会一直留在对象存储上。只删租约已经过期（节点不在运行）的写入节点的、整段早于
-// cutoff 的分段，与它自己的删除不会冲突；在 remoteGrace 之后删（查询节点可能正在下载）。
+// dropAbandonedBefore 处理已经下线的写入节点（租约过期或已释放）在对象存储上留下的分段：分段只由写它的节点删、
+// 清单只由它自己维护，没有这一步的话，缩容、换了编号的节点的分段会一直留着，崩溃前上传了却没写进清单的分段
+// 也一直查不到。所以每个写入节点在保留期检查时：
+//
+//   - 删掉下线节点整段早于 cutoff 的分段，以及合并后没来得及删的旧分段（remoteGrace 之后删，查询节点可能正在下载）；
+//   - 按列举到的、留下的分段重写它的清单（先于删除）。
+//
+// 还在运行的节点的不动，与它自己的删除、清单不会冲突。返回删掉的过期日志条数。
 func (s *Store) dropAbandonedBefore(ctx context.Context, cutoff int64) (int64, error) {
 	if s.remote == nil || s.readOnly || s.fenced.Load() {
 		return 0, nil
@@ -166,27 +171,36 @@ func (s *Store) dropAbandonedBefore(ctx context.Context, cutoff int64) (int64, e
 	if err != nil {
 		return 0, fmt.Errorf("list %s: %w", s.remote.obj, err)
 	}
-	alive := map[int64]bool{}
-	var drop []segment
-	var n int64
+	byWriter := map[int64][]segment{}
 	for _, k := range keys {
 		g, ok := parseSegment(s.segDir, filepath.Join(s.segDir, filepath.FromSlash(k)))
-		w := writerOf(g.seqMin)
-		if !ok || g.tmax >= cutoff || w == s.writerID {
-			continue
-		}
-		a, ok := alive[w]
-		if !ok {
-			if a, err = s.writerAlive(ctx, w); err != nil {
-				return n, err
-			}
-			alive[w] = a
-		}
-		if !a {
-			drop = append(drop, g)
-			n += g.rows
+		if ok && writerOf(g.seqMin) != s.writerID {
+			byWriter[writerOf(g.seqMin)] = append(byWriter[writerOf(g.seqMin)], g)
 		}
 	}
-	s.trashRemote(drop)
+	var n int64
+	for w, segs := range byWriter {
+		alive, err := s.writerAlive(ctx, w)
+		if err != nil {
+			return n, err
+		}
+		if alive {
+			continue
+		}
+		kept, drop := dropContained(segs)
+		live := kept[:0]
+		for _, g := range kept {
+			if g.tmax < cutoff {
+				drop = append(drop, g)
+				n += g.rows
+			} else {
+				live = append(live, g)
+			}
+		}
+		if err := s.rewriteManifests(ctx, w, live); err != nil {
+			return n, err
+		}
+		s.trashRemote(drop)
+	}
 	return n, nil
 }

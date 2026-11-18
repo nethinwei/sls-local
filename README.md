@@ -67,13 +67,13 @@ services:
 | `-version` | | 打印版本 |
 | `-reindex` | | 按 `-config` 里当前的索引重建全部日志的全文列后退出（先停掉正在运行的 sls-local；多节点时在写入节点上执行） |
 | `-segments` | 数据文件旁的 `segments/` | Parquet 分段目录；用对象存储时是本地缓存 |
-| `-flush-interval` | `5m`（写入节点 `10s`） | 把新写入的日志写成分段的间隔 |
+| `-flush-interval` | `5m`（写入节点 `2s`） | 把新写入的日志写成分段的间隔 |
 | `-flush-rows` | `1000000` | 新写入的日志积累到这么多条时提前刷段 |
 | `-storage` | | 对象存储：`s3://bucket/prefix` 或 `file:///path`，见[生产部署](#生产部署) |
 | `-cache-size` | `53687091200`（50 GB） | 用对象存储时本地缓存的上限（字节） |
 | `-target` | `all` | 节点角色：`all`（单机）、`write`（只写入）、`read`（只查询） |
-| `-writer-id` | `0` | 写入节点的编号，共用一个对象存储的写入节点各不相同 |
-| `-refresh-interval` | `10s` | 查询节点重新列出对象存储上分段的间隔 |
+| `-writer-id` | `0` | 写入节点的编号，共用一个对象存储的写入节点各不相同；`auto` 取主机名末尾的序号（StatefulSet） |
+| `-refresh-interval` | `2s` | 查询节点重新读取分段清单的间隔 |
 | `-query-timeout` | `1m` | 一次查询的最长执行时间，超时返回 `RequestTimeout` |
 | `-max-queries` | CPU 数 × 2 | 同时执行的查询数，排队 5 秒拿不到名额返回 `ReadQuotaExceed` |
 | `-memory-limit` | 物理内存的 80% | DuckDB 的内存上限，如 `8GB`；容器里设成低于容器的内存上限 |
@@ -83,7 +83,8 @@ services:
 
 ```yaml
 access_keys:        # 可选：设置后所有 SLS 接口都校验请求签名（v1）；省略时不校验
-  - {id: my-collector, secret: ...}
+  - {id: my-collector, secret: ..., projects: [myproject]}  # projects 可选：只能访问这些 project
+  - {id: my-grafana, secret: ...}
 logstores:
   - project: myproject
     logstore: app
@@ -102,16 +103,19 @@ logstores:
 
 ## 生产部署
 
+> **beta**：多节点部署是 v0.3 新加的，已经在单机上用 2 写 + 1～2 读、对象存储、真实采集器验证过，还没有经过大规模、
+> 长时间的生产运行。已知的限制见本节末尾。
+
 ```
-LoongCollector / SDK ──PutLogs──► 负载均衡 ──► 写入节点 × N ──分段（每 10 秒）──► 对象存储（OSS / S3）
+LoongCollector / SDK ──PutLogs──► 负载均衡 ──► 写入节点 × N ──分段（每 2 秒）──► 对象存储（OSS / S3）
                                                                                    │
 Grafana SLS 数据源 ──GetLogs 等──► 负载均衡 ──► 查询节点 × M ◄──按需下载、本地缓存───┘
 ```
 
-- **写入节点**（`-target=write`）只接受写入：日志先进本地的数据文件，每 10 秒写成 Parquet 分段上传，合并小文件、按 `-ttl` 删除过期的分段。数据目录要用持久卷，`-writer-id` 在写入节点之间不能重复（StatefulSet 的序号正合适）：编号在对象存储上有租约，重复的节点启动不了；旧进程没正常退出、又换了盘时，要等租约过期（1 分钟）。缩容掉的写入节点留下的过期分段由其余写入节点删除。
-- **查询节点**（`-target=read`）只做查询：每 10 秒列出对象存储上的分段，按需下载到本地缓存（`-cache-size`）。不存数据，可以随意增减。
+- **写入节点**（`-target=write`）只接受写入：日志先进本地的数据文件，每 2 秒写成 Parquet 分段上传，合并小文件、按 `-ttl` 删除过期的分段。数据目录要用持久卷，`-writer-id` 在写入节点之间不能重复（StatefulSet 里用 `-writer-id=auto` 取 Pod 序号）：编号在对象存储上有租约，重复的节点启动不了；旧进程没正常退出、又换了盘时，要等租约过期（1 分钟）。缩容掉的写入节点留下的过期分段由其余写入节点删除。租约按时间判断是否过期，各节点的时钟要同步（NTP）。
+- **查询节点**（`-target=read`）只做查询：每 2 秒读取写入节点维护的分段清单（只下载变了的），按需下载分段到本地缓存（`-cache-size`）。不存数据，可以随意增减。
 - 写入与查询节点都要 `-storage s3://bucket/prefix`，S3 端点与凭证取环境变量 `SLS_S3_ENDPOINT`（OSS 填 `oss-cn-hangzhou.aliyuncs.com` 这样的端点）、`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`，`SLS_S3_REGION` 可选。
-- 在配置文件里写 `access_keys` 开启签名校验；采集器、SDK、Grafana 数据源用其中的密钥。
+- 在配置文件里写 `access_keys` 开启签名校验；采集器、SDK、Grafana 数据源用其中的密钥，`projects` 可以把密钥限定在某些 project。
 
 完整的示例（SeaweedFS 当 S3、2 个写入节点、1 个查询节点、LoongCollector、Grafana）：
 
@@ -120,12 +124,16 @@ cd examples/production
 docker compose up -d     # 打开 http://localhost:3000
 ```
 
+Kubernetes 的部署清单（StatefulSet 写入节点、Deployment 查询节点、域名解析）见 [examples/kubernetes](examples/kubernetes)。
+
 **要知道的事**
 
-- 查询节点看到的数据比写入晚一个刷段间隔（写入节点默认 10 秒）。单机（`-target=all`）写入后立即可查。
+- 查询节点看到的数据比写入晚 2～4 秒（刷段间隔加清单刷新间隔）。单机（`-target=all`）写入后立即可查。
 - 一个 logstore 的第一个分段到达对象存储之前，查询节点上它不存在（返回 `LogStoreNotExist`）：在配置文件里预先声明 logstore。
-- 写入节点前面放负载均衡或 Kubernetes Service（固定地址）。LoongCollector 解析一次域名后一直用那个地址，直接用 DNS 轮询分不了流，节点换了 IP 也不会跟着换。
-- 第一次查询某个分段时要把它整个下载下来（约 100 万条一个文件）：冷数据的第一次查询会慢一些，缓存盘留够空间。
+- 写入节点前面放负载均衡或 Kubernetes Service（固定地址）。LoongCollector 解析一次域名后一直用那个地址，直接用 DNS 轮询分不了流，节点换了 IP 也不会跟着换。四层负载均衡（含 Kubernetes Service）按连接分流，采集器保持长连接：采集器少时写入会集中在个别写入节点上，采集器多（如每个节点一个 DaemonSet）时才分得开；要按请求分流用七层负载均衡。
+- 第一次查询某个分段时要把它整个下载下来（最多 100 万条一个文件，并行下载）：冷数据的第一次查询会慢一些，缓存盘留够空间。新分段的 bloom 在查询节点刷新时就预先下载。
+- 对象存储的请求：每个写入节点每 2 秒为有新日志的每个 logstore 上传一个分段与它的 bloom（合并时再重写几次），加上清单；查询节点每 2 秒列一次清单。50 个持续写入的 logstore 时，每个写入节点约每秒 50 次 PUT（每天约 430 万次，按 OSS 标准存储 PUT 类请求 0.01 元/万次估算约 4 元）。嫌多可以调大 `-flush-interval`，代价是查询节点看到数据更晚。
+- 已知的限制：一次查询只在一个查询节点上执行（加查询节点提高并发，不让单个查询更快）；查询节点看不到写入节点还没刷段的日志；鉴权、限流的报错码没有与真实 SLS 逐条对照（[兼容性](docs/compatibility.md)）。
 - 监控：每个节点的 `/metrics`（Prometheus 格式：各接口的请求数与耗时、写入量、刷段、上传下载、bloom 跳过的分段）、`/health`（存活）、`/ready`（就绪），都不需要签名。
 
 ## 兼容性

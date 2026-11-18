@@ -106,6 +106,9 @@ type Store struct {
 	readOnly    bool
 	stats       counters
 
+	lastAdded    map[partition]time.Time // 分区最近一次刷出新分段的时间（合并用，flushMu 保护）
+	compactQuiet time.Duration           // 见 DefaultCompactQuiet
+
 	leaseToken string      // 见 lease.go
 	fenced     atomic.Bool // 租约被别的写入节点拿走了
 	stopLease  context.CancelFunc
@@ -198,7 +201,8 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, errors.New("a read-only store needs object storage")
 	}
 	s := &Store{db: db, known: map[string]bool{}, onError: opts.OnError, writerID: opts.WriterID, readOnly: opts.ReadOnly,
-		blooms: newBloomCache(cmp.Or(opts.BloomCache, DefaultBloomCache))}
+		blooms: newBloomCache(cmp.Or(opts.BloomCache, DefaultBloomCache)), lastAdded: map[partition]time.Time{},
+		compactQuiet: DefaultCompactQuiet}
 	if err := s.initSegments(&opts); err != nil {
 		db.Close()
 		return nil, err
@@ -238,6 +242,11 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		go s.leaseKeeper(lctx, s.leaseDone)
 	}
 	if s.cur, err = s.loadSegments(ctx); err != nil {
+		s.closeLease()
+		db.Close()
+		return nil, err
+	}
+	if err := s.syncManifests(ctx); err != nil { // 上传之后、写清单之前崩溃的分段补进清单
 		s.closeLease()
 		db.Close()
 		return nil, err
@@ -283,6 +292,7 @@ func (s *Store) initSegments(opts *Options) error {
 			return err
 		}
 		opts.SegmentDir, s.flushRows, s.syncFlush, s.tempSegDir = dir, n, true, dir
+		s.compactQuiet = 0    // 每次刷段后都把小文件合并完，测试覆盖合并
 		if s.onError == nil { // 测试里刷段、合并出错不能悄悄过去
 			s.onError = func(err error) { panic(err) }
 		}
@@ -400,6 +410,9 @@ func (s *Store) Close() error {
 		<-s.flusherDone
 	}
 	s.closeLease()
+	if s.remote != nil {
+		s.remote.fetchWG.Wait()
+	}
 	if s.tempSegDir != "" {
 		defer os.RemoveAll(s.tempSegDir)
 	}
@@ -678,7 +691,10 @@ func (s *Store) DeleteBefore(ctx context.Context, cutoff time.Time) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	n += s.dropSegmentsBefore(cutoff.Unix())
+	d, err := s.dropSegmentsBefore(ctx, cutoff.Unix())
+	if err != nil {
+		return n + d, err
+	}
 	m, err := s.dropAbandonedBefore(ctx, cutoff.Unix())
-	return n + m, err
+	return n + d + m, err
 }

@@ -28,7 +28,7 @@ services:
     entrypoint: ["sh", "-c", "until echo 's3.bucket.create -name sls' | weed shell -master=seaweedfs:9333 2>&1 | grep -q 'created bucket'; do sleep 1; done"]
     depends_on: [seaweedfs]
 
-  # 写入节点：只接受 PutLogs，每 10 秒把新日志写成分段上传。数据目录放未刷段的日志，要用持久卷
+  # 写入节点：只接受 PutLogs，每 2 秒把新日志写成分段上传。数据目录放未刷段的日志，要用持久卷
   sls-write-0:
     <<: *sls-local
     command: ["-target", "write", "-writer-id", "0", "-storage", "s3://sls/logs", "-config", "/etc/sls-local.yaml"]
@@ -44,7 +44,7 @@ services:
       default:
         aliases: [demo.sls-write]
 
-  # 查询节点：读对象存储上全部写入节点的分段（比写入晚约 10 秒），本地只放缓存，可以随意增减
+  # 查询节点：读对象存储上全部写入节点的分段（比写入晚约 2～4 秒），本地只放缓存，可以随意增减
   sls-read:
     <<: *sls-local
     command: ["-target", "read", "-storage", "s3://sls/logs", "-config", "/etc/sls-local.yaml", "-cache-size", "10737418240"]

@@ -124,7 +124,7 @@ func TestBloomPruning(t *testing.T) {
 		cond, _ := query.Search(q, ix)
 		n := 0
 		for i := range sn.segs {
-			if s.mayContain(&sn.segs[i], cond.Need) {
+			if s.mayContain(context.Background(), &sn.segs[i], cond.Need) {
 				n++
 			}
 		}

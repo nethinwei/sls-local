@@ -202,8 +202,16 @@ func newBloomCache(limit int) *bloomCache {
 	return &bloomCache{limit: limit, lru: list.New(), byKey: map[string]*list.Element{}}
 }
 
+// cached 判断分段的旁路文件是否已经读进内存。
+func (c *bloomCache) cached(segPath string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.byKey[segPath]
+	return ok
+}
+
 // get 返回分段的 bloom；没有 bloom 文件时为 nil。
-func (c *bloomCache) get(segPath string) (*bloomFile, error) {
+func (c *bloomCache) get(ctx context.Context, segPath string) (*bloomFile, error) {
 	c.mu.Lock()
 	if e, ok := c.byKey[segPath]; ok {
 		c.lru.MoveToFront(e)
@@ -213,7 +221,7 @@ func (c *bloomCache) get(segPath string) (*bloomFile, error) {
 	}
 	c.mu.Unlock()
 	if c.fetch != nil {
-		if err := c.fetch(context.Background(), segPath+".bloom"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := c.fetch(ctx, segPath+".bloom"); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 	}
@@ -252,11 +260,11 @@ func (c *bloomCache) forget(segPath string) {
 }
 
 // mayContain 判断分段是否可能满足 need；读不到 bloom 时不跳过。
-func (s *Store) mayContain(g *segment, need *query.Need) bool {
+func (s *Store) mayContain(ctx context.Context, g *segment, need *query.Need) bool {
 	if need == nil || s.blooms == nil {
 		return true
 	}
-	f, err := s.blooms.get(g.path)
+	f, err := s.blooms.get(ctx, g.path)
 	if err != nil {
 		if s.onError != nil {
 			s.onError(fmt.Errorf("read bloom: %w", err))
@@ -278,11 +286,11 @@ func (s *Store) mayContain(g *segment, need *query.Need) bool {
 }
 
 // colsOf 是分段写成独立列的字段：刚写的分段带着，其余从旁路文件读（读不到时为空，字段全从 JSON 取）。
-func (s *Store) colsOf(g *segment) map[string]bool {
+func (s *Store) colsOf(ctx context.Context, g *segment) map[string]bool {
 	if g.cols != nil {
 		return g.cols
 	}
-	f, err := s.blooms.get(g.path)
+	f, err := s.blooms.get(ctx, g.path)
 	if err != nil || f == nil {
 		if err != nil && s.onError != nil {
 			s.onError(fmt.Errorf("read segment sidecar: %w", err))

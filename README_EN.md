@@ -67,13 +67,13 @@ services:
 | `-version` | | Print the version |
 | `-reindex` | | Rebuild the full-text column of all logs with the current indexes in `-config`, then exit (stop the running sls-local first; on a write node in a cluster) |
 | `-segments` | `segments/` next to the data file | Parquet segment directory; the local cache with object storage |
-| `-flush-interval` | `5m` (`10s` on write nodes) | How often new logs are written into segments |
+| `-flush-interval` | `5m` (`2s` on write nodes) | How often new logs are written into segments |
 | `-flush-rows` | `1000000` | Flush early once this many new logs are waiting |
 | `-storage` | | Object storage: `s3://bucket/prefix` or `file:///path`, see [Production](#production) |
 | `-cache-size` | `53687091200` (50 GB) | Local cache limit in bytes when using object storage |
 | `-target` | `all` | Node role: `all` (single node), `write` (writes only), `read` (queries only) |
-| `-writer-id` | `0` | Write node number; unique among write nodes sharing an object storage |
-| `-refresh-interval` | `10s` | How often read nodes list the segments on object storage |
+| `-writer-id` | `0` | Write node number; unique among write nodes sharing an object storage. `auto` takes the number at the end of the hostname (StatefulSet) |
+| `-refresh-interval` | `2s` | How often read nodes reread the segment manifests |
 | `-query-timeout` | `1m` | Longest a query may run; then `RequestTimeout` |
 | `-max-queries` | 2 × CPUs | Queries running at once; a query that waits 5 s for a slot gets `ReadQuotaExceed` |
 | `-memory-limit` | 80% of RAM | DuckDB memory limit, e.g. `8GB`; in a container set it below the container's limit |
@@ -83,7 +83,8 @@ services:
 
 ```yaml
 access_keys:        # optional: verify request signatures (v1) on every SLS API; none when omitted
-  - {id: my-collector, secret: ...}
+  - {id: my-collector, secret: ..., projects: [myproject]}  # projects is optional: only these projects
+  - {id: my-grafana, secret: ...}
 logstores:
   - project: myproject
     logstore: app
@@ -102,16 +103,20 @@ As in SLS, changing an index only affects logs written afterwards. To search old
 
 ## Production
 
+> **Beta**: multi-node deployment is new in v0.3. It has been checked on one machine with 2 write nodes, 1–2 read
+> nodes, object storage and a real collector, but not yet in large, long-running production use. Known limits are
+> listed at the end of this section.
+
 ```
-LoongCollector / SDK ──PutLogs──► load balancer ──► write nodes × N ──segments (every 10 s)──► object storage (OSS / S3)
+LoongCollector / SDK ──PutLogs──► load balancer ──► write nodes × N ──segments (every 2 s)──► object storage (OSS / S3)
                                                                                                 │
 Grafana SLS data source ──GetLogs etc.──► load balancer ──► read nodes × M ◄──download, local cache──┘
 ```
 
-- **Write nodes** (`-target=write`) only accept writes: logs go to the local data file first and are uploaded as Parquet segments every 10 seconds; write nodes also merge small files and remove expired segments (`-ttl`). Give the data directory a persistent volume; `-writer-id` must differ between write nodes (a StatefulSet ordinal fits): each id has a lease in the object storage, so a second node with the same id refuses to start; if the previous process died without stopping cleanly and the node comes back on a new disk, it waits for the lease to expire (1 minute). Expired segments of write nodes that were scaled away are removed by the remaining write nodes.
-- **Read nodes** (`-target=read`) only serve queries: every 10 seconds they list the segments on object storage and download what a query needs into a local cache (`-cache-size`). They keep no data; add or remove them freely.
+- **Write nodes** (`-target=write`) only accept writes: logs go to the local data file first and are uploaded as Parquet segments every 2 seconds; write nodes also merge small files and remove expired segments (`-ttl`). Give the data directory a persistent volume; `-writer-id` must differ between write nodes (in a StatefulSet, `-writer-id=auto` takes the pod ordinal): each id has a lease in the object storage, so a second node with the same id refuses to start; if the previous process died without stopping cleanly and the node comes back on a new disk, it waits for the lease to expire (1 minute). Expired segments of write nodes that were scaled away are removed by the remaining write nodes. Leases expire by time, so keep the nodes' clocks in sync (NTP).
+- **Read nodes** (`-target=read`) only serve queries: every 2 seconds they reread the segment manifests kept by the write nodes (downloading only the changed ones) and download the segments a query needs into a local cache (`-cache-size`). They keep no data; add or remove them freely.
 - Both need `-storage s3://bucket/prefix`. The S3 endpoint and credentials come from `SLS_S3_ENDPOINT` (for OSS an endpoint such as `oss-cn-hangzhou.aliyuncs.com`), `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`; `SLS_S3_REGION` is optional.
-- Set `access_keys` in the configuration file to verify signatures; collectors, SDKs and Grafana data sources use those keys.
+- Set `access_keys` in the configuration file to verify signatures; collectors, SDKs and Grafana data sources use those keys, and `projects` limits a key to some projects.
 
 A complete example (SeaweedFS as S3, 2 write nodes, 1 read node, LoongCollector, Grafana):
 
@@ -120,12 +125,16 @@ cd examples/production
 docker compose up -d     # then open http://localhost:3000
 ```
 
+Kubernetes manifests (write nodes as a StatefulSet, read nodes as a Deployment, name resolution) are in [examples/kubernetes](examples/kubernetes).
+
 **Good to know**
 
-- Read nodes see writes one flush interval late (10 seconds by default on write nodes). A single node (`-target=all`) shows a write immediately.
+- Read nodes see writes 2–4 seconds late (the flush interval plus the manifest refresh interval). A single node (`-target=all`) shows a write immediately.
 - Until a logstore's first segment reaches object storage, it does not exist on read nodes (`LogStoreNotExist`): declare logstores in the configuration file.
-- Put write nodes behind a load balancer or a Kubernetes Service (a stable address). LoongCollector resolves the name once and keeps the address, so DNS round robin does not spread the load, and it does not follow a node to a new IP.
-- The first query that needs a segment downloads the whole file (up to 1M logs): cold data is slower the first time; give the cache disk enough room.
+- Put write nodes behind a load balancer or a Kubernetes Service (a stable address). LoongCollector resolves the name once and keeps the address, so DNS round robin does not spread the load, and it does not follow a node to a new IP. Layer-4 load balancers (including Kubernetes Services) balance per connection and collectors keep connections open: with few collectors, writes concentrate on a few write nodes; they spread out with many collectors (such as one per node in a DaemonSet). Use a layer-7 load balancer to balance per request.
+- The first query that needs a segment downloads the whole file (up to 1M logs, in parallel): cold data is slower the first time; give the cache disk enough room. Read nodes fetch the bloom filters of new segments as soon as they see them.
+- Object storage requests: every 2 seconds each write node uploads a segment and its bloom filter for each logstore that received logs (rewritten a few more times by compaction), plus a manifest; read nodes list the manifests every 2 seconds. With 50 logstores written continuously, a write node makes about 50 PUTs per second (about 4.3 million a day). Raise `-flush-interval` to make fewer, at the cost of read nodes seeing data later.
+- Known limits: a query runs on one read node (more read nodes add concurrency, not speed for a single query); read nodes do not see logs a write node has not flushed yet; the error codes for authentication and limits have not been checked one by one against SLS ([compatibility](docs/compatibility.md)).
 - Monitoring: `/metrics` on every node (Prometheus format: requests and durations per API, ingestion, flushes, uploads and downloads, segments skipped by bloom filters), `/health` (liveness) and `/ready` (readiness), none of them signed.
 
 ## Compatibility

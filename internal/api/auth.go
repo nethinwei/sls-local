@@ -31,6 +31,9 @@ const maxBody = 64 << 20
 // SetAccessKeys 设置允许的 AccessKey（id → secret）；为空时不校验签名。
 func (s *Server) SetAccessKeys(keys map[string]string) { s.accessKeys = keys }
 
+// SetKeyProjects 限定 AccessKey 能访问的 project（id → project 列表）；不在里面的密钥能访问全部 project。
+func (s *Server) SetKeyProjects(scopes map[string][]string) { s.keyScopes = scopes }
+
 // authenticate 校验请求签名，通过后交给 h。
 func (s *Server) authenticate(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +42,9 @@ func (s *Server) authenticate(h http.Handler) http.Handler {
 			return
 		}
 		status, code, msg := s.verify(r)
+		if code == "" {
+			status, code, msg = s.authorize(r)
+		}
 		if code != "" {
 			// 签名错误时采集器会不停重试（实测 LoongCollector 每秒几千次）：日志限频，响应照常
 			if s.authLog.allow() {
@@ -92,6 +98,20 @@ func (s *Server) verify(r *http.Request) (int, string, string) {
 		return http.StatusUnauthorized, "SignatureNotMatch", "signature " + sig + " not match"
 	}
 	return 0, "", ""
+}
+
+// authorize 检查签名通过的密钥能否访问请求的 project（Host 的第一段）。
+func (s *Server) authorize(r *http.Request) (int, string, string) {
+	id, _, _ := strings.Cut(strings.TrimPrefix(r.Header.Get("Authorization"), "LOG "), ":")
+	scope, ok := s.keyScopes[id]
+	if !ok {
+		return 0, "", ""
+	}
+	project := projectFromHost(r.Host)
+	if slices.Contains(scope, project) {
+		return 0, "", ""
+	}
+	return http.StatusUnauthorized, "Unauthorized", fmt.Sprintf("AccessKeyId %s is not allowed to access project %q", id, project)
 }
 
 // logLimiter 让一类日志每 every 最多打一条，并带上期间省略的条数。

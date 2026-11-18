@@ -27,7 +27,7 @@ RUN set -eux; \
 FROM debian:bookworm-slim
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="sls-local" \
-      org.opencontainers.image.description="Local server speaking the Alibaba Cloud SLS API, for development and testing" \
+      org.opencontainers.image.description="Log service speaking the Alibaba Cloud SLS API, for development and self-hosting" \
       org.opencontainers.image.source="https://github.com/nethinwei/sls-local" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="$VERSION"

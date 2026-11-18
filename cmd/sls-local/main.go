@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -52,7 +53,8 @@ func main() {
 		cacheSize = flag.Int64("cache-size", 50<<30, "使用对象存储时本地缓存的上限（字节）；0 表示不限")
 		target    = flag.String("target", "all", "节点角色：all 写入与查询都做（单机）；write 只接受写入，把分段写进对象存储；"+
 			"read 只做查询，读对象存储上全部写入节点的分段（看到的数据比写入晚一个刷段间隔）。write、read 需要 -storage")
-		writerID  = flag.Int64("writer-id", 0, "写入节点的编号：共用一个对象存储的写入节点各不相同（如 StatefulSet 的序号）")
+		writerID = flag.String("writer-id", "0", "写入节点的编号：共用一个对象存储的写入节点各不相同。auto 取主机名末尾的 -<序号>"+
+			"（Kubernetes StatefulSet 的 Pod 名，如 sls-local-write-2 → 2）")
 		refresh   = flag.Duration("refresh-interval", store.DefaultRefreshInterval, "查询节点重新列出对象存储上分段的间隔")
 		memLimit  = flag.String("memory-limit", "", "DuckDB 的内存上限，如 8GB；默认物理内存的 80%（容器里应设成低于容器内存上限）")
 		qTimeout  = flag.Duration("query-timeout", time.Minute, "一次查询（检索、SQL、直方图、上下文）的最长执行时间；0 表示不限")
@@ -73,9 +75,14 @@ func main() {
 		return
 	}
 
+	id, err := parseWriterID(*writerID, os.Hostname)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sls-local:", err)
+		os.Exit(2)
+	}
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	opts := store.Options{SQLOffset: *sqlOffset, SegmentDir: *segDir, FlushInterval: *flushInt, FlushRows: *flushRows,
-		Storage: *storage, CacheSize: *cacheSize, WriterID: *writerID, RefreshInterval: *refresh, MemoryLimit: *memLimit,
+		Storage: *storage, CacheSize: *cacheSize, WriterID: id, RefreshInterval: *refresh, MemoryLimit: *memLimit,
 		OnError: func(err error) { backgroundErrors.Add(1); log.Warn("segments", "error", err) }}
 	if opts.SegmentDir == "" && *dataPath != "" {
 		opts.SegmentDir = filepath.Join(filepath.Dir(*dataPath), "segments")
@@ -99,6 +106,27 @@ func main() {
 		log.Error("sls-local exited", "error", err)
 		os.Exit(1)
 	}
+}
+
+// parseWriterID 解析 -writer-id：数字，或 auto（主机名末尾的 -<序号>）。
+func parseWriterID(v string, hostname func() (string, error)) (int64, error) {
+	if v != "auto" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("-writer-id %q: want a number or auto", v)
+		}
+		return id, nil
+	}
+	host, err := hostname()
+	if err != nil {
+		return 0, fmt.Errorf("-writer-id=auto: %w", err)
+	}
+	i := strings.LastIndexByte(host, '-')
+	id, err := strconv.ParseInt(host[i+1:], 10, 64)
+	if i < 0 || err != nil || id < 0 {
+		return 0, fmt.Errorf("-writer-id=auto: hostname %q does not end with -<number> (a StatefulSet pod name)", host)
+	}
+	return id, nil
 }
 
 // flagSet 判断命令行上是否显式给了某个参数。
@@ -125,7 +153,7 @@ func applyTarget(target string, opts *store.Options, dataPath, httpsAddr *string
 	}
 	if target == "write" {
 		if !flagSet("flush-interval") { // 查询节点看到的数据比写入晚一个刷段间隔
-			opts.FlushInterval = 10 * time.Second
+			opts.FlushInterval = 2 * time.Second
 		}
 		return nil
 	}
@@ -176,11 +204,12 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath, target string
 
 	srv := api.New(st, log, indexes)
 	srv.Target = target
-	keys, err := accessKeys(cfgPath)
+	keys, projects, err := accessKeys(cfgPath)
 	if err != nil {
 		return err
 	}
 	srv.SetAccessKeys(keys)
+	srv.SetKeyProjects(projects)
 	srv.SetLimits(limits)
 	srv.Metrics.Func("sls_local_background_errors_total", "Errors of background work (flush, compaction, upload, refresh).",
 		"counter", func() float64 { return float64(backgroundErrors.Load()) })
@@ -278,20 +307,24 @@ func loadIndexes(cfgPath string) (map[string]*sls.Index, []string, error) {
 	return indexesOf(cfg)
 }
 
-// accessKeys 读配置文件里的 AccessKey（id → secret）；没有配置时为空（不校验签名）。
-func accessKeys(cfgPath string) (map[string]string, error) {
-	keys := map[string]string{}
+// accessKeys 读配置文件里的 AccessKey（id → secret）与限定了 project 的密钥（id → project 列表）；
+// 没有配置时为空（不校验签名）。
+func accessKeys(cfgPath string) (map[string]string, map[string][]string, error) {
+	keys, projects := map[string]string{}, map[string][]string{}
 	if cfgPath == "" {
-		return keys, nil
+		return keys, projects, nil
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, k := range cfg.AccessKeys {
 		keys[k.ID] = k.Secret
+		if len(k.Projects) > 0 {
+			projects[k.ID] = k.Projects
+		}
 	}
-	return keys, nil
+	return keys, projects, nil
 }
 
 func indexesOf(cfg *config.Config) (map[string]*sls.Index, []string, error) {

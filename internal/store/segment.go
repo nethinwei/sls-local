@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
+	"math/bits"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -60,7 +62,7 @@ const (
 	// DefaultFlushInterval 与 DefaultFlushRows 是刷段的默认时机：间隔到了，或头部积累的行数到了。
 	DefaultFlushInterval = 5 * time.Minute
 	// DefaultRefreshInterval 是查询节点重新列出对象存储上分段的间隔。
-	DefaultRefreshInterval = 10 * time.Second
+	DefaultRefreshInterval = 2 * time.Second
 	DefaultFlushRows       = 1_000_000
 	segmentHour            = 3600
 	// segmentRowGroup 是分段的 row group 行数。DuckDB 默认 122880：翻页只取一页时也要解压一整个 row group
@@ -133,7 +135,7 @@ const baseCols = "project, logstore, seq, t, ns, topic, source, tags, contents, 
 //
 // 头部与没写某个字段列的分段，这一列从 JSON 现取；写了的直接读。分段按写了哪些列分组，每组一个 read_parquet。
 func (sn *snapshot) source(ctx context.Context, project, logstore string, from, to int64, keys []string) (string, error) {
-	return sn.sourceOf(ctx, project, logstore, keys, func(g *segment) bool { return g.tmax >= from && g.tmin <= to })
+	return sn.sourceOf(ctx, project, logstore, keys, func(g *segment) bool { return g.tmax >= from && g.tmin <= to }, nil)
 }
 
 // hasSegments 判断 project/logstore 在 [from, to] 里有没有分段。
@@ -148,11 +150,13 @@ func (sn *snapshot) hasSegments(project, logstore string, from, to int64) bool {
 
 // sourceSeq 与 source 相同，但按写入序号 [lo, hi] 选分段（上下文按 seq 找相邻的日志）。
 func (sn *snapshot) sourceSeq(ctx context.Context, project, logstore string, lo, hi int64) (string, error) {
-	return sn.sourceOf(ctx, project, logstore, nil, func(g *segment) bool { return g.seqMax >= lo && g.seqMin <= hi })
+	return sn.sourceOf(ctx, project, logstore, nil, func(g *segment) bool { return g.seqMax >= lo && g.seqMin <= hi }, nil)
 }
 
-// sourceOf 是 project/logstore 里 pick 选中的分段加上头部。本地没有的分段先从对象存储下载。
-func (sn *snapshot) sourceOf(ctx context.Context, project, logstore string, keys []string, pick func(*segment) bool) (string, error) {
+// sourceOf 是 project/logstore 里 pick 选中、按 bloom 可能满足 need 的分段加上头部。本地没有的旁路文件与
+// 分段先从对象存储并行下载。
+func (sn *snapshot) sourceOf(ctx context.Context, project, logstore string, keys []string, pick func(*segment) bool,
+	need *query.Need) (string, error) {
 	head := "logs"
 	if sn.boundary > 0 || len(keys) > 0 {
 		head = "SELECT " + baseCols + fieldCols(keys, nil) + " FROM logs"
@@ -164,19 +168,16 @@ func (sn *snapshot) sourceOf(ctx context.Context, project, logstore string, keys
 		have  map[string]bool
 		paths []string
 	}
+	picked, err := sn.pick(ctx, project, logstore, keys, pick, need)
+	if err != nil {
+		return "", err
+	}
 	var groups []*group
 	byCols := map[string]*group{}
-	for i := range sn.segs {
-		g := &sn.segs[i]
-		if g.project != project || g.logstore != logstore || !pick(g) {
-			continue
-		}
-		if err := sn.st.ensureLocal(ctx, g.path); err != nil {
-			return "", err
-		}
+	for _, g := range picked {
 		var cols map[string]bool
 		if len(keys) > 0 {
-			cols = sn.st.colsOf(g)
+			cols = sn.st.colsOf(ctx, g)
 		}
 		var sig strings.Builder // 只按 keys 里哪些写成了列分组
 		for _, k := range keys {
@@ -210,6 +211,44 @@ func (sn *snapshot) sourceOf(ctx context.Context, project, logstore string, keys
 			strings.Join(grp.paths, ", ")+"])")
 	}
 	return "(" + strings.Join(parts, " UNION ALL ") + ") AS logs", nil
+}
+
+// pick 选出 project/logstore 里 pick 选中、按 bloom 可能满足 need 的分段，并保证它们在本地。用对象存储时
+// 旁路文件（bloom 与字段列清单）、分段文件都并行下载：冷缓存上一次查询可能涉及几百个文件。
+func (sn *snapshot) pick(ctx context.Context, project, logstore string, keys []string, pick func(*segment) bool,
+	need *query.Need) ([]*segment, error) {
+	s := sn.st
+	var cands []*segment
+	for i := range sn.segs {
+		if g := &sn.segs[i]; g.project == project && g.logstore == logstore && pick(g) {
+			cands = append(cands, g)
+		}
+	}
+	if s.remote != nil && (need != nil || len(keys) > 0) {
+		err := parallel(ctx, len(cands), func(i int) error {
+			g := cands[i]
+			if need == nil && g.cols != nil || s.blooms.cached(g.path) {
+				return nil
+			}
+			if err := s.ensureLocal(ctx, g.path+".bloom"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	picked := cands[:0:0]
+	for _, g := range cands {
+		if s.mayContain(ctx, g, need) {
+			picked = append(picked, g)
+		}
+	}
+	if err := parallel(ctx, len(picked), func(i int) error { return s.ensureLocal(ctx, picked[i].path) }); err != nil {
+		return nil, err
+	}
+	return picked, nil
 }
 
 // fieldCols 是 SELECT 里的字段列：have 里有的直接读，其余从 contents 现取。
@@ -310,6 +349,9 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 	}
 	next := &snapshot{boundary: upper, segs: append(slices.Clone(cur.segs), added...)}
 	s.publish(next, func() { s.deleteHead(upper) })
+	for _, g := range added {
+		s.lastAdded[partitionOf(g)] = time.Now()
+	}
 	s.stats.flushes.Add(1)
 	s.stats.flushedRows.Add(total)
 	s.markPending(added) // 提交之后才上传；失败的下次再传
@@ -323,6 +365,10 @@ func (s *Store) Flush(ctx context.Context) (int64, error) {
 // 合成不超过 segmentFileRows 行的一个（刷段频繁、迟到的日志都会留下小文件，文件多了查询要打开的也多）。
 // 返回合并掉的文件数。
 //
+// 还在写入的分区（compactQuiet 内刷出过新分段）分层合并：大小同一层（行数差不到 compactFanIn 倍）的相邻文件
+// 攒够 compactFanIn 个才合成上一层的一个，每行日志只被重写约 log(segmentFileRows/每次刷段行数)/log(compactFanIn)
+// 次；不然每次刷段都会把越来越大的合并结果再重写一遍。安静下来的分区把剩下的相邻小文件一次合并完。
+//
 // 合并后的文件的 seq 范围包含被合并的各个文件：写完改名之后、删掉旧文件之前崩溃的话，启动时按包含关系
 // 删掉旧文件（loadSegments）。所以只合并 seq 上相邻的一串，中间不能隔着不参与合并的文件。
 func (s *Store) Compact(ctx context.Context) (int, error) {
@@ -335,6 +381,12 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 	cur := s.cur
 	s.segMu.Unlock()
 
+	now := time.Now()
+	for k, t := range s.lastAdded {
+		if now.Sub(t) >= s.compactQuiet {
+			delete(s.lastAdded, k)
+		}
+	}
 	segs := slices.Clone(cur.segs)
 	slices.SortFunc(segs, compareSegments)
 	var groups [][]segment
@@ -348,19 +400,29 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 	}
 	for i, g := range segs {
 		if i > 0 && !samePartition(segs[i-1], g) {
-			closeRun()
+			run, runRows = nil, 0 // 分层时没攒够的不合并
 		}
-		if g.rows >= segmentFileRows/2 {
-			closeRun()
-			continue
-		}
-		if runRows+g.rows > segmentFileRows {
-			closeRun()
+		_, busy := s.lastAdded[partitionOf(g)]
+		if g.rows >= segmentFileRows/2 || runRows+g.rows > segmentFileRows ||
+			busy && len(run) > 0 && sizeTier(run[0].rows) != sizeTier(g.rows) {
+			if busy {
+				run, runRows = nil, 0
+			} else {
+				closeRun()
+			}
+			if g.rows >= segmentFileRows/2 {
+				continue
+			}
 		}
 		run = append(run, g)
 		runRows += g.rows
+		if busy && len(run) == compactFanIn {
+			closeRun()
+		}
+		if !busy && (i+1 == len(segs) || !samePartition(g, segs[i+1])) {
+			closeRun()
+		}
 	}
-	closeRun()
 
 	merged := 0
 	for _, grp := range groups {
@@ -403,6 +465,26 @@ func (s *Store) Compact(ctx context.Context) (int, error) {
 }
 
 func hourOf(g segment) int64 { return g.tmin - g.tmin%segmentHour }
+
+// partition 是合并的范围：写入节点的一个 project/logstore/小时。
+type partition struct {
+	project, logstore string
+	hour, writer      int64
+}
+
+func partitionOf(g segment) partition {
+	return partition{g.project, g.logstore, hourOf(g), writerOf(g.seqMin)}
+}
+
+const (
+	// compactFanIn 是分层合并时一次合并的文件数。
+	compactFanIn = 8
+	// DefaultCompactQuiet：分区这么久没有刷出新分段，就把剩下的小文件一次合并完。
+	DefaultCompactQuiet = 10 * time.Minute
+)
+
+// sizeTier 是文件大小的层级：每层行数相差 compactFanIn 倍。
+func sizeTier(rows int64) int { return bits.Len64(uint64(rows)) / 3 }
 
 // samePartition：同一个写入节点的同一个 project/logstore/小时（合并、包含关系只在这个范围里）。
 func samePartition(a, b segment) bool {
@@ -649,7 +731,12 @@ func (s *Store) loadSegments(ctx context.Context) (*snapshot, error) {
 	var remote []segment
 	inRemote := map[string]bool{}
 	if s.remote != nil {
-		if remote, err = s.remoteSegments(ctx); err != nil {
+		if s.readOnly {
+			remote, err = s.manifestSegments(ctx)
+		} else {
+			remote, err = s.remoteSegments(ctx)
+		}
+		if err != nil {
 			return nil, err
 		}
 		if !s.readOnly { // 写入节点只管自己写的分段
@@ -770,7 +857,7 @@ func parseSegment(root, path string) (segment, bool) {
 // ---------------- 保留与重建 ----------------
 
 // dropSegmentsBefore 去掉整段都早于 cutoff 的分段，返回去掉的行数；文件在没有查询使用后删除。
-func (s *Store) dropSegmentsBefore(cutoff int64) int64 {
+func (s *Store) dropSegmentsBefore(ctx context.Context, cutoff int64) (int64, error) {
 	s.flushMu.Lock()
 	defer s.flushMu.Unlock()
 	s.segMu.Lock()
@@ -787,11 +874,11 @@ func (s *Store) dropSegmentsBefore(cutoff int64) int64 {
 		}
 	}
 	if len(drop) == 0 {
-		return 0
+		return 0, nil
 	}
 	s.trashRemote(drop)
 	s.publish(&snapshot{boundary: cur.boundary, segs: keep}, func() { s.removeSegments(drop) })
-	return n
+	return n, s.syncManifests(ctx)
 }
 
 // removeSegments 删除分段文件与它们的 bloom。
@@ -855,5 +942,5 @@ func (s *Store) unflush(ctx context.Context) error {
 		return err
 	}
 	s.publish(&snapshot{}, func() { s.removeSegments(cur.segs) })
-	return nil
+	return s.syncManifests(ctx)
 }

@@ -20,7 +20,8 @@ import (
 //	        level: {type: text, token: [...], doc_value: true}
 //	        cost_ms: {type: long, doc_value: true}
 //	access_keys:          # 设置后校验请求签名（v1）；省略时不校验（本地开发）
-//	  - {id: LTAI..., secret: ...}
+//	  - {id: LTAI..., secret: ...}                      # 可以访问全部 project
+//	  - {id: LTAI..., secret: ..., projects: [devproj]}  # 只能访问列出的 project
 type Config struct {
 	Logstores  []Logstore  `json:"logstores"`
 	AccessKeys []AccessKey `json:"access_keys"`
@@ -30,6 +31,8 @@ type Config struct {
 type AccessKey struct {
 	ID     string `json:"id"`
 	Secret string `json:"secret"`
+	// Projects 是这个密钥能访问的 project；省略时不限。
+	Projects []string `json:"projects,omitempty"`
 }
 
 // Logstore 是一个预建的 logstore 及其索引。

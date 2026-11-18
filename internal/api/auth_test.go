@@ -28,6 +28,7 @@ func authEnv(t *testing.T) (string, func(id, secret string) *sls.Client) {
 	t.Cleanup(func() { st.Close() })
 	h := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	h.SetAccessKeys(map[string]string{"ak1": "sk1", "ak2": "sk2"})
+	h.SetKeyProjects(map[string][]string{"ak2": {"proj"}}) // ak2 只能访问 proj
 	srv := httptest.NewServer(h.Handler())
 	t.Cleanup(srv.Close)
 	addr := srv.Listener.Addr().String()
@@ -84,6 +85,17 @@ func TestAuth(t *testing.T) {
 		if se, isSLS := err.(*sls.Error); !isSLS || se.Code != c.code {
 			t.Errorf("%s: %v, want %s", c.name, err, c.code)
 		}
+	}
+
+	// 限定了 project 的密钥访问别的 project；没有限定的不受影响
+	if err := ok.PutLogs("other", "app", group); err == nil || err.(*sls.Error).Code != "Unauthorized" {
+		t.Errorf("ak2 writing to another project: %v", err)
+	}
+	if _, err := ok.ListLogStore("other"); err == nil {
+		t.Error("ak2 listed another project")
+	}
+	if err := client("ak1", "sk1").PutLogs("other", "app", group); err != nil {
+		t.Errorf("ak1 writing to another project: %v", err)
 	}
 
 	// 用合法签名换掉请求体；Date 偏得太多

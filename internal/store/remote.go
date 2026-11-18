@@ -35,6 +35,10 @@ type remoteState struct {
 	lastUse  map[string]time.Time  // 本地文件最近一次被查询用到的时间
 	trash    []trashItem           // 等着从对象存储删除的键
 	fetching map[string]*fetchCall // 正在下载的文件
+	fetchWG  sync.WaitGroup        // 后台的下载（关闭时等它们结束）
+
+	manifests map[int64]string        // 写入节点：各小时清单在对象存储上的内容（见 manifest.go，flushMu 保护）
+	read      map[string]readManifest // 查询节点：读到的清单（按键）
 }
 
 type trashItem struct {
@@ -47,7 +51,10 @@ type fetchCall struct {
 	err  error
 }
 
-// ensureLocal 保证分段（或旁路文件）在本地：本地没有就从对象存储下载。
+// ensureLocal 保证分段（或旁路文件）在本地：本地没有就从对象存储下载。同一个文件同时只下载一次。
+//
+// 下载不随调用方的 ctx 取消（另一个查询可能在等同一个文件，下好了以后的查询也用得上），调用方的 ctx 结束时
+// 只是不再等。
 func (s *Store) ensureLocal(ctx context.Context, local string) error {
 	r := s.remote
 	if r == nil {
@@ -55,34 +62,46 @@ func (s *Store) ensureLocal(ctx context.Context, local string) error {
 	}
 	r.mu.Lock()
 	r.lastUse[local] = time.Now()
-	if c, ok := r.fetching[local]; ok {
-		r.mu.Unlock()
-		select {
-		case <-c.done:
-			return c.err
-		case <-ctx.Done():
-			return ctx.Err()
+	c, ok := r.fetching[local]
+	if !ok {
+		if _, err := os.Stat(local); err == nil {
+			r.mu.Unlock()
+			return nil
 		}
+		c = &fetchCall{done: make(chan struct{})}
+		r.fetching[local] = c
+		r.fetchWG.Add(1)
+		go s.fetch(local, c)
 	}
-	if _, err := os.Stat(local); err == nil {
-		r.mu.Unlock()
-		return nil
-	}
-	c := &fetchCall{done: make(chan struct{})}
-	r.fetching[local] = c
 	r.mu.Unlock()
+	select {
+	case <-c.done:
+		return c.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
-	c.err = r.obj.Get(ctx, s.objectKey(local), local)
+// downloadTimeout 是下载一个文件的最长时间。
+const downloadTimeout = 10 * time.Minute
+
+func (s *Store) fetch(local string, c *fetchCall) {
+	r := s.remote
+	defer r.fetchWG.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	err := r.obj.Get(ctx, s.objectKey(local), local)
+	if err != nil {
+		s.stats.downloadFailures.Add(1)
+		err = fmt.Errorf("download segment: %w", err)
+	} else {
+		s.stats.downloads.Add(1)
+	}
 	r.mu.Lock()
+	c.err = err
 	delete(r.fetching, local)
 	r.mu.Unlock()
 	close(c.done)
-	if c.err != nil {
-		s.stats.downloadFailures.Add(1)
-		return fmt.Errorf("download segment: %w", c.err)
-	}
-	s.stats.downloads.Add(1)
-	return nil
 }
 
 // markPending 记下新写的分段，等着上传。
@@ -133,7 +152,7 @@ func (s *Store) upload(ctx context.Context) error {
 		delete(r.pending, p)
 		r.mu.Unlock()
 	}
-	return nil
+	return s.syncManifests(ctx)
 }
 
 // trashRemote 安排在 remoteGrace 之后从对象存储删除分段与旁路文件。
@@ -267,15 +286,34 @@ func (s *Store) registerLogstores(ctx context.Context, segs []segment) error {
 
 // refresh 是查询节点定期做的：重新列出对象存储上的分段，换上新的快照，淘汰本地缓存。
 func (s *Store) refresh(ctx context.Context) error {
-	segs, err := s.remoteSegments(ctx)
+	segs, err := s.manifestSegments(ctx)
 	if err != nil {
 		return err
 	}
 	if err := s.registerLogstores(ctx, segs); err != nil {
 		return err
 	}
+	s.segMu.Lock()
+	old := map[string]bool{}
+	for _, g := range s.cur.segs {
+		old[g.path] = true
+	}
+	s.segMu.Unlock()
+	var added []string
+	for _, g := range segs {
+		if !old[g.path] {
+			added = append(added, g.path+".bloom")
+		}
+	}
 	s.publish(&snapshot{segs: segs}, nil)
-	return s.evict()
+	// 新分段的旁路文件（bloom、字段列清单）先下载好：查询多半看最近的数据，它们小，查询时就不用等
+	err = parallel(ctx, len(added), func(i int) error {
+		if err := s.ensureLocal(ctx, added[i]); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	})
+	return errors.Join(err, s.evict())
 }
 
 // refresher 在后台定期 refresh，直到 ctx 结束。
@@ -320,20 +358,15 @@ func (s *Store) remoteSegments(ctx context.Context) ([]segment, error) {
 			segs = append(segs, g)
 		}
 	}
-	slices.SortFunc(segs, compareSegments)
-	kept := segs[:0]
-	for _, g := range segs {
-		if n := len(kept); n > 0 && samePartition(kept[n-1], g) && g.seqMax <= kept[n-1].seqMax {
-			if s.owns(g) {
-				for _, k := range []string{s.objectKey(g.path), s.objectKey(g.path + ".bloom")} {
-					if err := s.remote.obj.Delete(ctx, k); err != nil {
-						return nil, err
-					}
+	kept, dropped := dropContained(segs)
+	for _, g := range dropped {
+		if s.owns(g) {
+			for _, k := range []string{s.objectKey(g.path), s.objectKey(g.path + ".bloom")} {
+				if err := s.remote.obj.Delete(ctx, k); err != nil {
+					return nil, err
 				}
 			}
-			continue
 		}
-		kept = append(kept, g)
 	}
 	return kept, nil
 }

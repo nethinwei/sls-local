@@ -35,8 +35,9 @@ type Server struct {
 	// Target 是节点的角色：""（或 all）什么都做；write 只接受写入；read 只做查询。
 	Target string
 
-	accessKeys map[string]string // 见 SetAccessKeys
-	authLog    logLimiter        // 签名错误的日志限频
+	accessKeys map[string]string   // 见 SetAccessKeys
+	keyScopes  map[string][]string // 见 SetKeyProjects
+	authLog    logLimiter          // 签名错误的日志限频
 
 	// Metrics 是 /metrics 输出的指标。
 	Metrics    *metrics.Registry

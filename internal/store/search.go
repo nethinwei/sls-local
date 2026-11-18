@@ -40,8 +40,8 @@ type SearchResult struct {
 // SPL 用到的字段列。按 bloom 跳过不可能满足检索条件的分段。
 func (s *Store) source(ctx context.Context, sn *snapshot, p *SearchParams, extra ...string) (string, error) {
 	return sn.sourceOf(ctx, p.Project, p.Logstore, p.keys(extra...), func(g *segment) bool {
-		return g.tmax >= p.From && g.tmin <= p.To && s.mayContain(g, p.Where.Need)
-	})
+		return g.tmax >= p.From && g.tmin <= p.To
+	}, p.Where.Need)
 }
 
 // keys 是检索条件、SPL 与 extra 里用到的字段（fieldcol）。

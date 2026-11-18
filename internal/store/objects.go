@@ -25,6 +25,8 @@ type objects interface {
 	Get(ctx context.Context, key, local string) error
 	// List 列出 prefix 下的全部键。
 	List(ctx context.Context, prefix string) ([]string, error)
+	// ListVersions 列出 prefix 下的全部键与它们的版本（内容变了版本就变，如 S3 的 ETag）。
+	ListVersions(ctx context.Context, prefix string) (map[string]string, error)
 	// Delete 删除对象，不存在不算错。
 	Delete(ctx context.Context, key string) error
 	// ReadSmall、WriteSmall 读写小对象（写入节点的租约）。对象不存在时 ReadSmall 返回 fs.ErrNotExist。
@@ -108,6 +110,29 @@ func (o fsObjects) List(_ context.Context, prefix string) ([]string, error) {
 		return nil
 	})
 	return keys, err
+}
+
+func (o fsObjects) ListVersions(_ context.Context, prefix string) (map[string]string, error) {
+	out := map[string]string{}
+	err := filepath.WalkDir(o.path(prefix), func(p string, d fs.DirEntry, err error) error {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil || d.IsDir() || strings.HasSuffix(p, ".tmp") {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil // 刚被删
+		}
+		rel, err := filepath.Rel(o.root, p)
+		if err != nil {
+			return err
+		}
+		out[filepath.ToSlash(rel)] = fmt.Sprintf("%d-%d", info.ModTime().UnixNano(), info.Size())
+		return nil
+	})
+	return out, err
 }
 
 func (o fsObjects) Delete(_ context.Context, key string) error { return removeIfExists(o.path(key)) }
@@ -199,6 +224,17 @@ func (o *s3Objects) List(ctx context.Context, prefix string) ([]string, error) {
 		keys = append(keys, strings.TrimPrefix(obj.Key, o.prefix))
 	}
 	return keys, nil
+}
+
+func (o *s3Objects) ListVersions(ctx context.Context, prefix string) (map[string]string, error) {
+	out := map[string]string{}
+	for obj := range o.c.ListObjects(ctx, o.bucket, minio.ListObjectsOptions{Prefix: o.prefix + prefix, Recursive: true}) {
+		if obj.Err != nil {
+			return nil, obj.Err
+		}
+		out[strings.TrimPrefix(obj.Key, o.prefix)] = obj.ETag
+	}
+	return out, nil
 }
 
 func (o *s3Objects) Delete(ctx context.Context, key string) error {

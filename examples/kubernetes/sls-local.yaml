@@ -1,0 +1,162 @@
+# sls-local 在 Kubernetes 上的读写分离部署：写入节点（StatefulSet，带持久卷）× 2，查询节点（Deployment）× 2，
+# 分段放在 S3 兼容的对象存储（OSS、S3、MinIO……）上。
+#
+#   kubectl create namespace logging
+#   kubectl -n logging apply -f sls-local.yaml
+#
+# 部署前要改的：Secret 里的对象存储凭证与 AccessKey、-storage 的桶、SLS_S3_ENDPOINT、资源与磁盘大小。
+# 域名：SLS 的客户端把 project 放在域名的第一段（<project>.<endpoint>），集群里要能解析，见 README.md。
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sls-local
+stringData:
+  AWS_ACCESS_KEY_ID: change-me
+  AWS_SECRET_ACCESS_KEY: change-me
+  # 配置文件：索引与 AccessKey（格式见 internal/config）。示例密钥，务必替换
+  sls-local.yaml: |
+    access_keys:
+      - {id: collector, secret: change-me-collector-secret, projects: [demo]}
+      - {id: grafana, secret: change-me-grafana-secret}
+    logstores:
+      - {project: demo, logstore: app}
+---
+# 写入节点：只接受 PutLogs，每 2 秒把新日志写成分段上传。Pod 名末尾的序号就是 -writer-id（auto），
+# 编号在对象存储上有租约，不会有两个节点用同一个编号。数据目录放还没刷段的日志，要用持久卷。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sls-local-write
+spec:
+  serviceName: sls-local-write-pods
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: write}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: write}
+    spec:
+      terminationGracePeriodSeconds: 90 # 退出前把还没刷段的日志写成分段上传（最多 1 分钟）
+      securityContext: {fsGroup: 10001}
+      containers:
+        - name: sls-local
+          image: ghcr.io/nethinwei/sls-local:0.3.0
+          args:
+            - -target=write
+            - -writer-id=auto
+            - -storage=s3://sls-logs/prod
+            - -config=/etc/sls-local/sls-local.yaml
+            - -https=:8443 # 镜像以非 root 运行，不监听 443；Service 把 443 转到这里
+            - -memory-limit=3GB
+            - -ttl=168h
+          env:
+            - {name: SLS_S3_ENDPOINT, value: oss-cn-hangzhou-internal.aliyuncs.com}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: sls-local, key: AWS_ACCESS_KEY_ID}}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: sls-local, key: AWS_SECRET_ACCESS_KEY}}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: https, containerPort: 8443}
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests: {cpu: "2", memory: 4Gi}
+            limits: {memory: 4Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: config, mountPath: /etc/sls-local, readOnly: true}
+      volumes:
+        - name: config
+          secret: {secretName: sls-local, items: [{key: sls-local.yaml, path: sls-local.yaml}]}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 50Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sls-local-write-pods # StatefulSet 要求的 headless Service
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: write}
+  ports: [{name: http, port: 8080}]
+---
+# 采集器与 SDK 写到这里。LoongCollector 只解析一次域名，所以要用 ClusterIP（固定地址）分流，不能用 DNS 轮询
+apiVersion: v1
+kind: Service
+metadata:
+  name: sls-local-write
+spec:
+  selector: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: write}
+  ports:
+    - {name: https, port: 443, targetPort: https}
+    - {name: http, port: 80, targetPort: http}
+---
+# 查询节点：读对象存储上全部写入节点的分段（比写入晚约 2～4 秒），本地只放缓存，可以随意增减
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sls-local-read
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: read}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: read}
+    spec:
+      securityContext: {fsGroup: 10001}
+      containers:
+        - name: sls-local
+          image: ghcr.io/nethinwei/sls-local:0.3.0
+          args:
+            - -target=read
+            - -storage=s3://sls-logs/prod
+            - -config=/etc/sls-local/sls-local.yaml
+            - -cache-size=40000000000 # 低于下面缓存卷的大小
+            - -memory-limit=6GB
+          env:
+            - {name: SLS_S3_ENDPOINT, value: oss-cn-hangzhou-internal.aliyuncs.com}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: sls-local, key: AWS_ACCESS_KEY_ID}}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: sls-local, key: AWS_SECRET_ACCESS_KEY}}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {memory: 8Gi}
+          volumeMounts:
+            - {name: cache, mountPath: /data}
+            - {name: config, mountPath: /etc/sls-local, readOnly: true}
+      volumes:
+        - name: cache
+          emptyDir: {sizeLimit: 50Gi}
+        - name: config
+          secret: {secretName: sls-local, items: [{key: sls-local.yaml, path: sls-local.yaml}]}
+---
+# Grafana 的 SLS 数据源、SDK 查询走这里
+apiVersion: v1
+kind: Service
+metadata:
+  name: sls-local-read
+spec:
+  selector: {app.kubernetes.io/name: sls-local, app.kubernetes.io/component: read}
+  ports: [{name: http, port: 80, targetPort: http}]

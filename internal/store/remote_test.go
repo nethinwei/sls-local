@@ -21,6 +21,7 @@ func openRemote(t *testing.T, path, cache, storage string, cacheSize int64) *Sto
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.compactQuiet = 0
 	return s
 }
 
@@ -30,7 +31,7 @@ func remoteKeys(t *testing.T, dir string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys = slices.DeleteFunc(keys, func(k string) bool { return strings.HasPrefix(k, "_writers/") }) // 租约
+	keys = slices.DeleteFunc(keys, func(k string) bool { return strings.HasPrefix(k, "_") }) // 租约、清单
 	slices.Sort(keys)
 	return keys
 }

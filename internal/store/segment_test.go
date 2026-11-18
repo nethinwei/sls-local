@@ -116,7 +116,11 @@ func TestSegmentSnapshotDuringFlush(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int64
-	if err := s.db.QueryRow(`SELECT count(*) FROM ` + old.source("p", "l", 0, segBase*2, nil)).Scan(&n); err != nil || n != 100 {
+	src, err := old.source(ctx, "p", "l", 0, segBase*2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT count(*) FROM ` + src).Scan(&n); err != nil || n != 100 {
 		t.Fatalf("old snapshot sees %d (%v), want 100", n, err)
 	}
 	s.release(old)
@@ -330,7 +334,10 @@ func TestSegmentFieldColumns(t *testing.T) {
 	if withCol != 1 || without != 1 {
 		t.Fatalf("segments with lvl column = %d, without = %d", withCol, without)
 	}
-	src := sn.source("p", "l", 0, segBase*2, []string{"lvl", "Level", "level", "n"})
+	src, err := sn.source(ctx, "p", "l", 0, segBase*2, []string{"lvl", "Level", "level", "n"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
 		where string
 		want  int

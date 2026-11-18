@@ -35,14 +35,16 @@ func TestBloom(t *testing.T) {
 		t.Errorf("false positives = %d / 10000", fp)
 	}
 	path := filepath.Join(t.TempDir(), "x.bloom")
-	if err := writeBloomFile(path, bloomFile{"sig": b}); err != nil {
+	cols := map[string]bool{"level": true, "Level": true}
+	if err := writeBloomFile(path, &bloomFile{cols: cols, blooms: map[string]*bloom{"sig": b}}); err != nil {
 		t.Fatal(err)
 	}
 	f, err := readBloomFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !f["sig"].has("w42") || f["sig"].k != b.k || len(f["sig"].bits) != len(b.bits) {
+	got := f.blooms["sig"]
+	if !got.has("w42") || got.k != b.k || len(got.bits) != len(b.bits) || len(f.cols) != 2 || !f.cols["Level"] {
 		t.Fatal("bloom file round trip")
 	}
 }

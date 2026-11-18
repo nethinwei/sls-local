@@ -42,6 +42,9 @@ func main() {
 		segDir    = flag.String("segments", "", "Parquet 分段目录，默认是数据文件旁的 segments/；内存库时不刷段")
 		flushInt  = flag.Duration("flush-interval", store.DefaultFlushInterval, "刷段间隔：把新写入的日志写成 Parquet 分段")
 		flushRows = flag.Int64("flush-rows", store.DefaultFlushRows, "新写入的日志积累到这么多条时提前刷段")
+		storage   = flag.String("storage", "", "放分段的对象存储：file:///path 或 s3://bucket/prefix（S3 端点与凭证见 SLS_S3_ENDPOINT、"+
+			"AWS_ACCESS_KEY_ID、AWS_SECRET_ACCESS_KEY）。设置时 -segments 是本地缓存")
+		cacheSize = flag.Int64("cache-size", 50<<30, "使用对象存储时本地缓存的上限（字节）；0 表示不限")
 		ttl       = flag.Duration("ttl", 72*time.Hour, "日志保留时长，按 __time__ 删除；0 表示不删除")
 		cfgPath   = flag.String("config", "", "配置文件（YAML）：预建 logstore 并声明索引，格式见 internal/config")
 		sqlOffset = flag.Duration("sql-utc-offset", store.DefaultSQLOffset, "SQL 时间函数（from_unixtime、date_format、now）使用的时区偏移，SLS 默认东八区")
@@ -59,6 +62,7 @@ func main() {
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	opts := store.Options{SQLOffset: *sqlOffset, SegmentDir: *segDir, FlushInterval: *flushInt, FlushRows: *flushRows,
+		Storage: *storage, CacheSize: *cacheSize,
 		OnError: func(err error) { log.Warn("segments", "error", err) }}
 	if opts.SegmentDir == "" && *dataPath != "" {
 		opts.SegmentDir = filepath.Join(filepath.Dir(*dataPath), "segments")
@@ -140,7 +144,7 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath string, ttl ti
 		}()
 	}
 	log.Info("sls-local started", "version", version, "http", httpAddr, "https", httpsAddr, "data", dataPath,
-		"segments", opts.SegmentDir, "ttl", ttl.String(),
+		"segments", opts.SegmentDir, "storage", opts.Storage, "ttl", ttl.String(),
 		"config", cfgPath, "indexed_logstores", len(indexes))
 
 	if ttl > 0 {

@@ -33,13 +33,21 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 	base, baseArgs := p.where()
 	keys := p.keys(stmt.SQL, stmt.Processed) // 检索条件与语句用到的字段列
 	// log 与 compare 用的 log__shift_<n>（时间范围往前平移 n 秒，检索条件相同）
-	defs := []string{query.CTEDef("log", s.source(sn, &p, stmt.SQL, stmt.Processed), base, keys)}
+	from, err := s.source(ctx, sn, &p, stmt.SQL, stmt.Processed)
+	if err != nil {
+		return nil, err
+	}
+	defs := []string{query.CTEDef("log", from, base, keys)}
 	cteArgs := append([]any{}, baseArgs...)
 	for _, n := range stmt.Shifts {
 		sp := p
 		sp.From, sp.To = p.From-n, p.To-n
 		b, a := sp.where()
-		defs = append(defs, query.CTEDef(presto.ShiftTable(n), s.source(sn, &sp, stmt.SQL, stmt.Processed), b, keys))
+		shifted, err := s.source(ctx, sn, &sp, stmt.SQL, stmt.Processed)
+		if err != nil {
+			return nil, err
+		}
+		defs = append(defs, query.CTEDef(presto.ShiftTable(n), shifted, b, keys))
 		cteArgs = append(cteArgs, a...)
 	}
 	with := "WITH " + strings.Join(defs, ", ") + " "
@@ -55,7 +63,10 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 		if stmt.Processed != "" {
 			err = s.db.QueryRowContext(ctx, with+"SELECT "+stmt.Processed, append(cteArgs, stmt.Args...)...).Scan(&res.Processed)
 		} else {
-			err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+s.source(sn, &p)+` WHERE `+base, baseArgs...).Scan(&res.Processed)
+			var from string
+			if from, err = s.source(ctx, sn, &p); err == nil {
+				err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM `+from+` WHERE `+base, baseArgs...).Scan(&res.Processed)
+			}
 		}
 		processed <- err
 	}()

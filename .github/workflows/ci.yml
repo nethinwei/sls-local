@@ -40,6 +40,10 @@ jobs:
       - name: go test (segments)
         run: SLS_LOCAL_TEST_FLUSH_ROWS=3 go test -race ./...
 
+      # 再加上对象存储（临时目录）：每次刷段后本地缓存全部淘汰，查询都从对象存储下载
+      - name: go test (object storage)
+        run: SLS_LOCAL_TEST_FLUSH_ROWS=3 SLS_LOCAL_TEST_REMOTE=1 go test -race ./...
+
       - name: Every dependency has a license file
         run: scripts/collect-go-licenses.sh "$RUNNER_TEMP/licenses"
 

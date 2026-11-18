@@ -65,7 +65,7 @@ sls-local 的目标是：**SLS 的客户端（SDK、LoongCollector、Grafana 数
 
 ## 有意不实现
 
-sls-local 的定位是本地开发用的日志服务。SLS 有、而日志系统通常不需要的能力（以 Loki 为参照：Loki 也没有的）不实现：
+SLS 有、而日志系统通常不需要的能力（以 Loki 为参照：Loki 也没有的）不实现：
 
 - 中文分词（`chn`）：中文仍按分词符切词，整段中文是一个词。
 - `ip_to_*` 等 IP 地理函数（需要 IP 库；Loki 只在采集端做 geoip）。
@@ -75,3 +75,27 @@ sls-local 的定位是本地开发用的日志服务。SLS 有、而日志系统
 ## 已知差异
 
 逐条见 `testdata/golden/known-diffs.json`，概要见 [wire-findings.md](wire-findings.md) 末尾。
+
+数据跨多个分段（或很多行）时 DuckDB 并行扫描，以下结果不确定，golden 里标为「不稳定」：double 聚合（`sum`、`avg`、`stddev`）的最后一位、`order by` 并列行的先后、`array_agg` 的元素顺序。SLS 本身是分布式计算，同样不保证这些。
+
+## 鉴权、限流与多节点（v0.3）
+
+以下行为没有与真实 SLS 逐条对照（报错码取自 SLS 文档，HTTP 状态码与文案是 sls-local 自定的），客户端靠报错码区分时可以依赖，靠文案时不要：
+
+| 情形 | 返回 |
+|---|---|
+| 没有或看不懂 Authorization、AccessKeyId 不存在 | 401 `Unauthorized` |
+| 签名不符 | 401 `SignatureNotMatch` |
+| Date 与服务器时间相差超过 15 分钟 | 400 `RequestTimeTooSkewed` |
+| 请求体与 Content-MD5 不符 | 400 `InvalidContentMD5` |
+| 签名 v4（`SLS4-HMAC-SHA256`） | 401 `Unauthorized`：暂不支持，用 v1 |
+| 同时执行的查询满了、排队 5 秒仍拿不到名额 | 403 `ReadQuotaExceed` |
+| 查询超过 `-query-timeout` | 400 `RequestTimeout`（4xx：SDK 对 5xx 会自动重试约 90 秒） |
+| 写入超过 `-write-rate` | 403 `WriteQuotaExceed` |
+| 查询节点收到写入、写入节点收到查询 | 501 `NotSupported`，文案说明该发往哪类节点 |
+
+- 权限只有「有没有合法的密钥」一级，没有 RAM 那样按 project / logstore / 操作的授权，也不支持 STS 临时凭证。
+- 查询节点看到的数据比写入晚一个刷段间隔；在那之前新的 logstore 在查询节点上不存在（`LogStoreNotExist`），在配置文件里预先声明可以避免。
+- 多个写入节点时，上下文（GetContextLogs）按写入序号排列：同一来源的日志落在不同写入节点上时，先列完一个节点的再列另一个，与 SLS 按包的先后不同。
+- 保留期按分段删除：一个分段里最晚的日志也过期了才删，比 `-ttl` 最多多留一小时。
+- 只有一个 shard（`ListShards` 返回 shard 0）；写入节点之间的分流交给负载均衡。

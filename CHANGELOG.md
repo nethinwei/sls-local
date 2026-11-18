@@ -1,5 +1,44 @@
 # Changelog
 
+# v0.3.0（未发布）
+
+从本地开发用的模拟服务扩展到可以自建在生产环境：数据以 Parquet 分段放在对象存储上，写入节点与查询节点分开部署，开启签名校验。不配置这些时，单机用法与 v0.2 相同（数据文件会自动升级）。
+
+**存储**
+
+- 新写入的日志先进数据文件（头部），每 5 分钟或积累 100 万条时按 project / logstore / 小时写成 Parquet 分段（zstd，每个文件最多 100 万条）。查询看的是头部加分段的一份快照：刷段、合并期间的查询不会重复或漏掉日志。
+- 常见的字段（出现在 1% 以上的日志里，前 64 个）在分段里单独成列，聚合与字段检索直接读列，不再逐行解析 JSON。
+- 每个分段带 bloom 过滤器：检索罕见的值时跳过不可能命中的分段。与索引的分词符对应，索引改过之后旧分段不跳过（结果不变）。
+- 小分段定期合并；保留期按分段删除（最多多留一小时）；数据目录不存在时自动创建。
+- 新参数：`-segments`、`-flush-interval`、`-flush-rows`。
+
+**对象存储与多节点**
+
+- `-storage s3://bucket/prefix`（OSS、S3、MinIO 等，minio-go）或 `file:///path`：分段上传到对象存储，本地目录成为缓存（`-cache-size`，默认 50 GB）。先在本地提交再上传，上传失败会重试；换了磁盘时从对象存储恢复。
+- `-target=write|read`：写入节点只接受写入，默认每 10 秒刷段、退出前刷段；查询节点只做查询，每 10 秒（`-refresh-interval`）列出对象存储上的分段，看到的数据比写入晚一个刷段间隔。`-writer-id` 区分写入节点。
+- 示例：`examples/production`（SeaweedFS、2 个写入节点、1 个查询节点、LoongCollector、Grafana）。
+
+**运维**
+
+- 配置文件的 `access_keys`：校验请求签名（v1，与 SLS SDK、LoongCollector 相同），核对 Content-MD5；不配置时不校验。
+- `/health`、`/ready`、`/metrics`（Prometheus）：各接口的请求数与耗时、写入量、刷段、合并、上传下载、bloom 跳过的分段、后台错误。镜像的健康检查改用 `/health`。
+- `-query-timeout`（默认 1 分钟）、`-max-queries`（默认 CPU 数的 2 倍）、`-memory-limit`（DuckDB）、`-write-rate`（每个 logstore 每秒条数）。
+- 报错码与限制见 docs/compatibility.md「鉴权、限流与多节点」：这些没有与真实 SLS 逐条对照。
+
+**性能**（200 万条日志，落盘，与 v0.2 相比；`internal/api/bench_test.go`，`SLS_BENCH_DISK=1 SLS_BENCH_SEGMENTS=1`）
+
+- 分组聚合 128 → 9.5 ms，检索后聚合 121 → 9.3 ms，直方图 59 → 6.3 ms，百分位 65 → 15 ms，计数 7.1 → 3.6 ms。
+- 罕见值检索 70 → 0.9 ms，组合条件 12.9 → 5.7 ms，字段检索 6.8 → 3.9 ms。
+- 混合查询的并发吞吐 48 → 266 次/秒。
+- 变慢的：常见词的全文检索 7.0 → 9.4 ms，翻页 3.0 → 3.9 ms（只取 5 条 1.9 → 3.0 ms），写入 30 → 28 万条/秒。
+- 2000 万条时，罕见值检索 7.6 ms、上下文 9.8 ms；聚合仍随数据量线性增长（分组聚合 80 ms）。
+
+**其他**
+
+- 测试：CI 另外用 `SLS_LOCAL_TEST_FLUSH_ROWS=3`（数据频繁刷成分段、不断合并）与 `SLS_LOCAL_TEST_REMOTE=1`（再放进对象存储、每次刷段后清空本地缓存）各跑一遍全部测试；`SLS_LOCAL_TEST_REMOTE=s3://…` 可以在真实的 S3 上跑。
+- golden：4 个用例改标「不稳定」（并行扫描下 double 聚合的末位、并列行的顺序、`array_agg` 的元素顺序）。
+- e2e 的 GetIndex 测试改用固定时钟（之前随日期失效）。
+
 # v0.2.0 (2026-11-15)
 
 **SQL**

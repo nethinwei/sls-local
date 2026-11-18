@@ -2,8 +2,8 @@ sls-local
 Copyright (c) 2026 nethinwei
 Licensed under the MIT License (see LICENSE).
 
-sls-local is an independent, local implementation of the public HTTP API of Alibaba Cloud Simple
-Log Service (SLS), meant for development and testing: SLS clients and collectors (SDKs,
+sls-local is an independent implementation of the public HTTP API of Alibaba Cloud Simple Log
+Service (SLS), for development, testing and self-hosting: SLS clients and collectors (SDKs,
 LoongCollector) write to it and SLS data sources (such as nethinwei-sls-datasource for Grafana)
 query it, without a cloud account.
 

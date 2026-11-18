@@ -1,0 +1,18 @@
+# 采集 /logs/*.log，按 JSON 拆成字段，发往写入节点（demo.sls-write 是两个写入节点共用的名字）。
+# 社区版 LoongCollector 固定走 HTTPS:443（不校验证书），Endpoint 只写主机名，不写协议和端口。
+enable: true
+global:
+  EnableTimestampNanosecond: true
+inputs:
+  - Type: input_file
+    FilePaths: [/logs/*.log]
+processors:
+  - Type: processor_parse_json_native
+    SourceKey: content
+    KeepingSourceWhenParseFail: true
+flushers:
+  - Type: flusher_sls
+    Region: local
+    Endpoint: sls-write
+    Project: demo
+    Logstore: app

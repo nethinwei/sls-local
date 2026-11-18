@@ -1,0 +1,5 @@
+{
+  "default_access_key_id": "demo-collector",
+  "default_access_key": "change-me-collector-secret",
+  "send_running_status": false
+}

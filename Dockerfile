@@ -42,5 +42,6 @@ USER sls
 VOLUME /data
 # 8080：查询（HTTP）；443：写入（HTTPS 自签，LoongCollector 只走 443）
 EXPOSE 8080 443
-HEALTHCHECK --interval=10s --timeout=3s CMD wget -q -O /dev/null --header 'Host: health.localhost' http://127.0.0.1:8080/ || exit 1
+# /health 不要签名、不分节点角色（GET / 是 SLS 的接口：开启签名校验或在写入节点上不是 200）
+HEALTHCHECK --interval=10s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["sls-local"]

@@ -1,0 +1,89 @@
+# sls-local 多节点部署示例：对象存储（SeaweedFS）+ 2 个写入节点 + 1 个查询节点，开启签名校验。
+#   docker compose up -d   然后打开 http://localhost:3000 （免登录）
+#
+# 生产环境里对象存储换成 OSS / S3，写入节点放在负载均衡后面，各节点用 StatefulSet 一类有固定编号的部署方式：
+# -writer-id 在共用一个对象存储的写入节点之间不能重复。示例里的密钥都是演示用的，务必替换。
+name: sls-local-production
+
+x-sls-local: &sls-local
+  image: ${SLS_LOCAL_IMAGE:-ghcr.io/nethinwei/sls-local:0.3.0}
+  environment:
+    SLS_S3_ENDPOINT: seaweedfs:8333
+    SLS_S3_INSECURE: "1" # 示例的 SeaweedFS 走 HTTP；OSS / S3 不要设
+    AWS_ACCESS_KEY_ID: sls-local
+    AWS_SECRET_ACCESS_KEY: change-me-s3-secret
+  depends_on:
+    bucket: {condition: service_completed_successfully}
+  restart: unless-stopped
+
+services:
+  # S3 兼容的对象存储。生产里用 OSS / S3：-storage s3://bucket/prefix，SLS_S3_ENDPOINT 填它的端点
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.97
+    command: ["server", "-s3", "-s3.config=/etc/seaweedfs/s3.json", "-dir=/data"]
+    volumes: ["./s3.json:/etc/seaweedfs/s3.json:ro", "s3:/data"]
+
+  bucket: # 建桶（已存在时什么也不做）
+    image: chrislusf/seaweedfs:3.97
+    entrypoint: ["sh", "-c", "until echo 's3.bucket.create -name sls' | weed shell -master=seaweedfs:9333 2>&1 | grep -q 'created bucket'; do sleep 1; done"]
+    depends_on: [seaweedfs]
+
+  # 写入节点：只接受 PutLogs，每 10 秒把新日志写成分段上传。数据目录放未刷段的日志，要用持久卷
+  sls-write-0:
+    <<: *sls-local
+    command: ["-target", "write", "-writer-id", "0", "-storage", "s3://sls/logs", "-config", "/etc/sls-local.yaml"]
+    volumes: ["./sls-local.yaml:/etc/sls-local.yaml:ro", "write-0:/data"]
+    networks:
+      default:
+        aliases: [demo.sls-write] # 两个写入节点共用一个名字：采集器按 DNS 轮询分到两边
+  sls-write-1:
+    <<: *sls-local
+    command: ["-target", "write", "-writer-id", "1", "-storage", "s3://sls/logs", "-config", "/etc/sls-local.yaml"]
+    volumes: ["./sls-local.yaml:/etc/sls-local.yaml:ro", "write-1:/data"]
+    networks:
+      default:
+        aliases: [demo.sls-write]
+
+  # 查询节点：读对象存储上全部写入节点的分段（比写入晚约 10 秒），本地只放缓存，可以随意增减
+  sls-read:
+    <<: *sls-local
+    command: ["-target", "read", "-storage", "s3://sls/logs", "-config", "/etc/sls-local.yaml", "-cache-size", "10737418240"]
+    volumes: ["./sls-local.yaml:/etc/sls-local.yaml:ro", "read-cache:/data"]
+    ports: ["127.0.0.1:${SLS_LOCAL_PORT:-8080}:8080"] # /metrics、/health、/ready 也在这个端口
+    networks:
+      default:
+        aliases: [demo.sls-read]
+
+  loggen:
+    image: busybox:1.37
+    command: ["sh", "/loggen.sh"]
+    volumes: ["../quickstart/loggen.sh:/loggen.sh:ro", "logs:/logs"]
+
+  loongcollector:
+    image: sls-opensource-registry.cn-shanghai.cr.aliyuncs.com/loongcollector-community-edition/loongcollector:3.4.1
+    volumes:
+      - logs:/logs:ro
+      - ./loongcollector/pipeline.yaml:/usr/local/loongcollector/conf/continuous_pipeline_config/local/production.yaml:ro
+      - ./loongcollector/instance.json:/usr/local/loongcollector/conf/instance_config/local/loongcollector_config.json:ro
+    depends_on: [sls-write-0, sls-write-1]
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: nethinwei-sls-datasource
+      GF_PLUGINS_PREINSTALL_SYNC: nethinwei-sls-datasource@0.1.0@https://github.com/nethinwei/sls-grafana-datasource/releases/download/v0.1.0/nethinwei-sls-datasource-v0.1.0.zip
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../quickstart/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports: ["127.0.0.1:${GRAFANA_PORT:-3000}:3000"] # 匿名即 Admin，只绑本机
+    depends_on: [sls-read]
+
+volumes:
+  s3: {}
+  write-0: {}
+  write-1: {}
+  read-cache: {}
+  logs: {}

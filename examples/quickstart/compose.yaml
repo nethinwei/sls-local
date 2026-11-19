@@ -5,7 +5,7 @@ name: sls-local-quickstart
 
 services:
   sls-local:
-    image: ${SLS_LOCAL_IMAGE:-ghcr.io/nethinwei/sls-local:0.2.0}
+    image: ${SLS_LOCAL_IMAGE:-ghcr.io/nethinwei/sls-local:0.3.0}
     command: ["-config", "/etc/sls-local.yaml"]
     volumes:
       - ./sls-local.yaml:/etc/sls-local.yaml:ro

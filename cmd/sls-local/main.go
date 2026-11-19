@@ -136,10 +136,17 @@ func flagSet(name string) bool {
 	return set
 }
 
+// singleBackupFlush 是单机（-target=all）开了 -storage 时默认的刷段间隔。
+const singleBackupFlush = 30 * time.Second
+
 // applyTarget 按节点角色检查、调整参数。
 func applyTarget(target string, opts *store.Options, dataPath, httpsAddr *string, reindex bool) error {
 	switch target {
 	case "all":
+		if opts.Storage != "" && !flagSet("flush-interval") {
+			// 单机带对象存储时，对象存储是盘坏后的备份：没刷段的日志只在本地盘上，刷段间隔就是最多丢多少
+			opts.FlushInterval = singleBackupFlush
+		}
 		return nil
 	case "write", "read":
 	default:

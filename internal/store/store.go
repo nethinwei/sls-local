@@ -109,6 +109,9 @@ type Store struct {
 	lastAdded    map[partition]time.Time // 分区最近一次刷出新分段的时间（合并用，flushMu 保护）
 	compactQuiet time.Duration           // 见 DefaultCompactQuiet
 
+	refreshed  atomic.Int64  // 查询节点：上一次成功读到分段清单的时间（Unix 纳秒）
+	staleAfter time.Duration // 查询节点：这么久没成功刷新就不再就绪
+
 	leaseToken string      // 见 lease.go
 	fenced     atomic.Bool // 租约被别的写入节点拿走了
 	stopLease  context.CancelFunc
@@ -252,24 +255,30 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, err
 	}
 	if err := db.QueryRowContext(ctx, `SELECT coalesce(max(seq), 0) FROM logs`).Scan(&s.seq); err != nil {
+		s.closeLease()
 		db.Close()
 		return nil, err
 	}
 	s.seq = max(s.seq, s.cur.boundary, opts.WriterID<<writerShift)
 	if s.con, err = connector.Connect(ctx); err != nil {
+		s.closeLease()
 		db.Close()
 		return nil, err
 	}
 	if s.app, err = duckdb.NewAppenderFromConn(s.con, "", "logs"); err != nil {
 		s.con.Close()
+		s.closeLease()
 		db.Close()
 		return nil, err
 	}
 	switch {
 	case s.readOnly:
+		interval := cmp.Or(opts.RefreshInterval, DefaultRefreshInterval)
+		s.refreshed.Store(time.Now().UnixNano()) // 打开时刚读过
+		s.staleAfter = max(time.Minute, 5*interval)
 		fctx, cancel := context.WithCancel(context.Background())
 		s.stopFlusher, s.flusherDone = cancel, make(chan struct{})
-		go s.refresher(fctx, cmp.Or(opts.RefreshInterval, DefaultRefreshInterval))
+		go s.refresher(fctx, interval)
 	case s.segDir != "" && !s.syncFlush:
 		fctx, cancel := context.WithCancel(context.Background())
 		s.stopFlusher, s.flushNow, s.flusherDone = cancel, make(chan struct{}, 1), make(chan struct{})
@@ -446,10 +455,16 @@ func (s *Store) closeLease() {
 	}
 }
 
-// Ping 检查存储能不能用（就绪检查）：数据库可用，写入节点的租约没被别人拿走。
+// Ping 检查存储能不能用（就绪检查）：数据库可用，写入节点的租约没被别人拿走，查询节点最近成功读过分段清单
+// （对象存储连不上时，查询节点只能查到旧的数据，让负载均衡先用别的节点）。
 func (s *Store) Ping(ctx context.Context) error {
 	if s.fenced.Load() {
 		return ErrFenced
+	}
+	if s.readOnly {
+		if d := time.Since(time.Unix(0, s.refreshed.Load())); d > s.staleAfter {
+			return fmt.Errorf("segments not refreshed from object storage for %s", d.Round(time.Second))
+		}
 	}
 	return s.db.PingContext(ctx)
 }

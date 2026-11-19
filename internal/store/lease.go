@@ -29,6 +29,9 @@ import (
 var (
 	leaseTTL   = time.Minute
 	leaseRenew = 10 * time.Second
+	// abandonAfter：租约这么久没续，才认为写入节点已经下线（由别的节点接管它的清单、删它过期的分段）。比 leaseTTL
+	// 长得多：还在运行、只是一时连不上对象存储的节点不能被接管。正常退出的节点删掉了租约，立即算下线。
+	abandonAfter = 10 * time.Minute
 )
 
 // ErrFenced 是租约被另一个使用相同编号的写入节点拿走后的写入、刷段。
@@ -146,16 +149,16 @@ func (s *Store) releaseLease(ctx context.Context) error {
 	return s.remote.obj.Delete(ctx, leaseKey(s.writerID))
 }
 
-// writerAlive 判断写入节点是否还在运行（租约未过期）。
+// writerAlive 判断写入节点是否可能还在运行：有租约，且 abandonAfter 内续过。
 func (s *Store) writerAlive(ctx context.Context, writerID int64) (bool, error) {
 	r, err := s.readLease(ctx, writerID)
-	if err != nil {
+	if err != nil || r == nil {
 		return false, err
 	}
-	return r.fresh(time.Now()), nil
+	return time.Since(time.Unix(r.Renewed, 0)) < abandonAfter, nil
 }
 
-// dropAbandonedBefore 处理已经下线的写入节点（租约过期或已释放）在对象存储上留下的分段：分段只由写它的节点删、
+// dropAbandonedBefore 处理已经下线的写入节点（租约已释放，或 10 分钟没续）在对象存储上留下的分段：分段只由写它的节点删、
 // 清单只由它自己维护，没有这一步的话，缩容、换了编号的节点的分段会一直留着，崩溃前上传了却没写进清单的分段
 // 也一直查不到。所以每个写入节点在保留期检查时：
 //

@@ -76,7 +76,7 @@ services:
 | `-refresh-interval` | `2s` | How often read nodes reread the segment manifests |
 | `-query-timeout` | `1m` | Longest a query may run; then `RequestTimeout` |
 | `-max-queries` | 2 × CPUs | Queries running at once; a query that waits 5 s for a slot gets `ReadQuotaExceed` |
-| `-memory-limit` | 80% of RAM | DuckDB memory limit, e.g. `8GB`; in a container set it below the container's limit |
+| `-memory-limit` | 80% of RAM | DuckDB memory limit, e.g. `8GB`. DuckDB fills its cache up to about this much (expected); leave about 1 GB of headroom below the container's memory limit |
 | `-write-rate` | `0` (unlimited) | Logs per second each logstore accepts (2 s of burst), then `WriteQuotaExceed` |
 
 ### Configuration and indexes

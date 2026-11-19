@@ -36,6 +36,8 @@ type remoteState struct {
 	trash    []trashItem           // 等着从对象存储删除的键
 	fetching map[string]*fetchCall // 正在下载的文件
 	fetchWG  sync.WaitGroup        // 后台的下载（关闭时等它们结束）
+	closed   bool                  // 已关闭：不再开始新的下载
+	evicted  time.Time             // 上次淘汰本地缓存的时间
 
 	manifests map[int64]string        // 写入节点：各小时清单在对象存储上的内容（见 manifest.go，flushMu 保护）
 	read      map[string]readManifest // 查询节点：读到的清单（按键）
@@ -68,6 +70,10 @@ func (s *Store) ensureLocal(ctx context.Context, local string) error {
 			r.mu.Unlock()
 			return nil
 		}
+		if r.closed {
+			r.mu.Unlock()
+			return errStoreClosed
+		}
 		c = &fetchCall{done: make(chan struct{})}
 		r.fetching[local] = c
 		r.fetchWG.Add(1)
@@ -80,6 +86,16 @@ func (s *Store) ensureLocal(ctx context.Context, local string) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+var errStoreClosed = errors.New("store is closed")
+
+// closeDownloads 不再开始新的下载，并等正在进行的结束（关闭存储时）。
+func (r *remoteState) closeDownloads() {
+	r.mu.Lock()
+	r.closed = true
+	r.mu.Unlock()
+	r.fetchWG.Wait()
 }
 
 // downloadTimeout 是下载一个文件的最长时间。
@@ -200,12 +216,22 @@ func (s *Store) emptyTrash(ctx context.Context) error {
 	return nil
 }
 
+// evictEvery 是淘汰本地缓存的最短间隔：要遍历整个缓存目录，不必每次刷段、刷新都做。
+var evictEvery = 30 * time.Second
+
 // evict 删除已上传、remoteGrace 内没用过的本地分段，直到本地缓存不超过上限。最久没用的先删。
 func (s *Store) evict() error {
 	r := s.remote
 	if r == nil || r.limit <= 0 {
 		return nil
 	}
+	r.mu.Lock()
+	if since := time.Since(r.evicted); since < evictEvery && !s.testRemote {
+		r.mu.Unlock()
+		return nil
+	}
+	r.evicted = time.Now()
+	r.mu.Unlock()
 	type file struct {
 		path string
 		size int64

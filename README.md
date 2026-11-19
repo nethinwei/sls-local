@@ -76,7 +76,7 @@ services:
 | `-refresh-interval` | `2s` | 查询节点重新读取分段清单的间隔 |
 | `-query-timeout` | `1m` | 一次查询的最长执行时间，超时返回 `RequestTimeout` |
 | `-max-queries` | CPU 数 × 2 | 同时执行的查询数，排队 5 秒拿不到名额返回 `ReadQuotaExceed` |
-| `-memory-limit` | 物理内存的 80% | DuckDB 的内存上限，如 `8GB`；容器里设成低于容器的内存上限 |
+| `-memory-limit` | 物理内存的 80% | DuckDB 的内存上限，如 `8GB`。DuckDB 会把缓存用到接近这个值（正常现象）；容器的内存上限留出约 1 GB 余量 |
 | `-write-rate` | `0`（不限） | 每个 logstore 每秒最多写入的条数（允许 2 秒的突发），超过返回 `WriteQuotaExceed` |
 
 ### 配置文件与索引

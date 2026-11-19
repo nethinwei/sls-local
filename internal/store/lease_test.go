@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -112,7 +113,7 @@ func TestSeqExhausted(t *testing.T) {
 	}
 }
 
-// 下线的写入节点（租约过期或已释放）留下的过期分段由其他写入节点删除；还在运行的节点的不动。
+// 下线的写入节点（租约已释放，或 10 分钟没续）留下的过期分段由其他写入节点删除；还在运行的节点的不动。
 func TestDropAbandoned(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
@@ -156,5 +157,28 @@ func TestDropAbandoned(t *testing.T) {
 		if !ok || writerOf(g.seqMin) == 1 {
 			t.Errorf("abandoned segment %s kept (parsed %v)", k, ok)
 		}
+	}
+}
+
+// 租约过期不久（一时连不上对象存储）的写入节点不算下线；很久没续的才算。
+func TestWriterAlive(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	w := openNode(t, Options{WriterID: 1, SegmentDir: filepath.Join(tmp, "w"), Storage: "file://" + filepath.Join(tmp, "remote")})
+	defer w.Close()
+	for _, c := range []struct {
+		ago  time.Duration
+		want bool
+	}{{0, true}, {2 * leaseTTL, true}, {abandonAfter + time.Minute, false}} {
+		body := fmt.Sprintf(`{"token":"x","renewed":%d}`, time.Now().Add(-c.ago).Unix())
+		if err := w.remote.obj.WriteSmall(ctx, leaseKey(7), []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := w.writerAlive(ctx, 7); err != nil || got != c.want {
+			t.Errorf("renewed %v ago: alive = %v, %v", c.ago, got, err)
+		}
+	}
+	if got, _ := w.writerAlive(ctx, 8); got { // 没有租约（正常退出）
+		t.Error("writer without a lease is alive")
 	}
 }

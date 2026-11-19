@@ -411,7 +411,7 @@ func (s *Store) Close() error {
 	}
 	s.closeLease()
 	if s.remote != nil {
-		s.remote.fetchWG.Wait()
+		s.remote.closeDownloads()
 	}
 	if s.tempSegDir != "" {
 		defer os.RemoveAll(s.tempSegDir)

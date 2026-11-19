@@ -881,10 +881,16 @@ func (s *Store) dropSegmentsBefore(ctx context.Context, cutoff int64) (int64, er
 	return n, s.syncManifests(ctx)
 }
 
-// removeSegments 删除分段文件与它们的 bloom。
+// removeSegments 删除分段文件与它们的 bloom（本地），连同本地缓存的使用记录。
 func (s *Store) removeSegments(segs []segment) {
 	for _, g := range segs {
 		s.blooms.forget(g.path)
+		if s.remote != nil {
+			s.remote.mu.Lock()
+			delete(s.remote.lastUse, g.path)
+			delete(s.remote.lastUse, g.path+".bloom")
+			s.remote.mu.Unlock()
+		}
 		for _, p := range []string{g.path, g.path + ".bloom"} {
 			if err := os.Remove(p); err != nil && !os.IsNotExist(err) && s.onError != nil {
 				s.onError(err)

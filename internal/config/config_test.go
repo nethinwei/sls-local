@@ -46,6 +46,8 @@ func TestLoadRejects(t *testing.T) {
 		"duplicate":        "logstores: [{project: p, logstore: l}, {project: p, logstore: l}]",
 		"unknown type":     "logstores: [{project: p, logstore: l, index: {keys: {a: {type: int}}}}]",
 		"unknown field":    "logstore: []",
+		"missing secret":   "access_keys: [{id: a}]",
+		"duplicate key":    "access_keys: [{id: a, secret: x}, {id: a, secret: y, projects: [p]}]",
 	} {
 		if _, err := Load(write(t, s)); err == nil {
 			t.Errorf("%s: want error", name)

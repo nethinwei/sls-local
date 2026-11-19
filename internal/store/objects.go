@@ -38,9 +38,9 @@ type objects interface {
 // OpenObjects 按 URL 打开对象存储：
 //
 //	file:///path              本地或挂载的目录（NFS 等）
-//	s3://bucket/prefix        S3 兼容存储；端点与凭证取环境变量 SLS_S3_ENDPOINT（默认 s3.amazonaws.com）、
-//	                          AWS_ACCESS_KEY_ID、AWS_SECRET_ACCESS_KEY；SLS_S3_INSECURE=1 时走 HTTP，
-//	                          SLS_S3_REGION 指定区域
+//	s3://bucket/prefix        S3 兼容存储；端点取环境变量 SLS_S3_ENDPOINT（默认 s3.amazonaws.com），凭证依次取
+//	                          AWS_ACCESS_KEY_ID、AWS_SECRET_ACCESS_KEY，~/.aws/credentials，AWS 的 IAM 角色；
+//	                          SLS_S3_INSECURE=1 时走 HTTP，SLS_S3_REGION 指定区域
 func OpenObjects(rawURL string) (objects, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -61,7 +61,13 @@ func OpenObjects(rawURL string) (objects, error) {
 			endpoint = "s3.amazonaws.com"
 		}
 		c, err := minio.New(endpoint, &minio.Options{
-			Creds:  credentials.NewEnvAWS(),
+			// 先环境变量，再凭证文件（~/.aws/credentials），最后 AWS 的 IAM：EKS 的 IRSA（AWS_WEB_IDENTITY_TOKEN_FILE）、
+			// ECS 任务角色、EC2 实例角色。阿里云 OSS 用 AccessKey（环境变量）
+			Creds: credentials.NewChainCredentials([]credentials.Provider{
+				&credentials.EnvAWS{},
+				&credentials.FileAWSCredentials{},
+				&credentials.IAM{},
+			}),
 			Secure: os.Getenv("SLS_S3_INSECURE") != "1",
 			Region: os.Getenv("SLS_S3_REGION"),
 		})

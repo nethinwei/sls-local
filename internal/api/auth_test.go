@@ -129,3 +129,30 @@ func TestAuth(t *testing.T) {
 		t.Errorf("old date: %s", got)
 	}
 }
+
+// 签名不对时不读请求体：只知道 AccessKeyId 的请求不能让服务端读入整个请求体。
+func TestAuthRejectsBeforeReadingBody(t *testing.T) {
+	s := &Server{accessKeys: map[string]string{"ak1": "sk1"}, now: time.Now}
+	body := &countingReader{r: strings.NewReader(strings.Repeat("x", 1<<20))}
+	req := httptest.NewRequest("POST", "/logstores/app", body)
+	req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	req.Header.Set("Content-MD5", "00000000000000000000000000000000")
+	req.Header.Set("Authorization", "LOG ak1:bad")
+	if _, code, _ := s.verify(req); code != "SignatureNotMatch" {
+		t.Fatalf("code = %q", code)
+	}
+	if body.n != 0 {
+		t.Errorf("read %d bytes of the body before checking the signature", body.n)
+	}
+}
+
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
+}

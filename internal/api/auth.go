@@ -81,6 +81,11 @@ func (s *Server) verify(r *http.Request) (int, string, string) {
 		return http.StatusBadRequest, "RequestTimeTooSkewed", fmt.Sprintf("request time %s differs from server time by more than %s", date, maxSkew)
 	}
 	contentMD5 := r.Header.Get("Content-MD5")
+	// 先核对签名再读请求体：不然只知道 AccessKeyId、没有密钥的请求也能让服务端读入整个请求体
+	want := signV1(secret, r.Method, contentMD5, r.Header.Get("Content-Type"), date, r.Header, r.URL.EscapedPath(), r.URL.Query())
+	if !hmac.Equal([]byte(sig), []byte(want)) {
+		return http.StatusUnauthorized, "SignatureNotMatch", "signature " + sig + " not match"
+	}
 	if r.Body != nil && r.Body != http.NoBody {
 		body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxBody))
 		r.Body.Close()
@@ -92,10 +97,6 @@ func (s *Server) verify(r *http.Request) (int, string, string) {
 		if len(body) > 0 && !strings.EqualFold(contentMD5, fmt.Sprintf("%X", md5.Sum(body))) {
 			return http.StatusBadRequest, "InvalidContentMD5", "Content-MD5 does not match the body"
 		}
-	}
-	want := signV1(secret, r.Method, contentMD5, r.Header.Get("Content-Type"), date, r.Header, r.URL.EscapedPath(), r.URL.Query())
-	if !hmac.Equal([]byte(sig), []byte(want)) {
-		return http.StatusUnauthorized, "SignatureNotMatch", "signature " + sig + " not match"
 	}
 	return 0, "", ""
 }

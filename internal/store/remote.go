@@ -320,18 +320,26 @@ func (s *Store) refresh(ctx context.Context) error {
 		return err
 	}
 	s.segMu.Lock()
-	old := map[string]bool{}
+	old := map[string]segment{}
 	for _, g := range s.cur.segs {
-		old[g.path] = true
+		old[g.path] = g
 	}
 	s.segMu.Unlock()
 	var added []string
 	for _, g := range segs {
-		if !old[g.path] {
+		if _, ok := old[g.path]; ok {
+			delete(old, g.path)
+		} else {
 			added = append(added, g.path+".bloom")
 		}
 	}
-	s.publish(&snapshot{segs: segs}, nil)
+	// 不在新快照里的分段（合并掉了、过期了）不会再被查询用到：旧快照都不用了以后删掉本地的文件。
+	// 不删的话本地会积下大量刷段产生的小文件，要等缓存总量超过上限才淘汰
+	var removed []segment
+	for _, g := range old {
+		removed = append(removed, g)
+	}
+	s.publish(&snapshot{segs: segs}, func() { s.removeSegments(removed) })
 	// 新分段的旁路文件（bloom、字段列清单）先下载好：查询多半看最近的数据，它们小，查询时就不用等
 	err = parallel(ctx, len(added), func(i int) error {
 		if err := s.ensureLocal(ctx, added[i]); err != nil && !errors.Is(err, fs.ErrNotExist) {

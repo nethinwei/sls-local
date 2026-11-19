@@ -72,10 +72,15 @@ func Load(path string) (*Config, error) {
 			}
 		}
 	}
+	ids := map[string]bool{}
 	for i, k := range c.AccessKeys {
 		if k.ID == "" || k.Secret == "" {
 			return nil, fmt.Errorf("%s: access_keys[%d]: id and secret are required", path, i)
 		}
+		if ids[k.ID] {
+			return nil, fmt.Errorf("%s: access key %s is declared twice", path, k.ID)
+		}
+		ids[k.ID] = true
 	}
 	return &c, nil
 }

@@ -14,7 +14,7 @@
 
 **对象存储与多节点**
 
-- `-storage s3://bucket/prefix`（OSS、S3、MinIO 等，minio-go）或 `file:///path`：分段上传到对象存储，本地目录成为缓存（`-cache-size`，默认 50 GB）。先在本地提交再上传，上传失败会重试；换了磁盘时从对象存储恢复。
+- `-storage s3://bucket/prefix`（OSS、S3、MinIO 等，minio-go）或 `file:///path`：分段上传到对象存储，本地目录成为缓存（`-cache-size`，默认 50 GB；合并掉、过期的分段不等淘汰直接删）。先在本地提交再上传，上传失败会重试；换了磁盘时从对象存储恢复。S3 凭证依次取环境变量、`~/.aws/credentials`、AWS 的 IAM 角色（IRSA 等）。
 - `-target=write|read`：写入节点只接受写入，默认每 2 秒刷段、退出前刷段；查询节点只做查询，看到的数据比写入晚 2～4 秒。
 - 写入节点按小时维护自己的分段清单（`_manifests/<编号>/<小时>.json`），查询节点每 2 秒（`-refresh-interval`）只列出清单、下载变了的，不再列出全部分段；新分段的 bloom 在刷新时预先下载，查询用到的分段并行下载，查询取消时不再等。
 - `-writer-id` 区分写入节点（`auto` 取主机名末尾的序号，配合 StatefulSet）：写入节点在对象存储上持有编号的租约（`_writers/<编号>.json`，每 10 秒续约），编号重复的节点启动不了；运行中被别人拿走租约时停止写入、刷段与删除，`/ready` 失败。同一块盘上重启不用等租约过期。每个编号可写 2^48 条，用完时拒绝写入。
@@ -23,7 +23,7 @@
 
 **运维**
 
-- 配置文件的 `access_keys`：校验请求签名（v1，与 SLS SDK、LoongCollector 相同），核对 Content-MD5；不配置时不校验。`projects` 可以把密钥限定在某些 project。
+- 配置文件的 `access_keys`：校验请求签名（v1，与 SLS SDK、LoongCollector 相同），核对 Content-MD5；不配置时不校验。`projects` 可以把密钥限定在某些 project。先核对签名再读请求体。写入、查询节点没配 AccessKey 时启动日志里警告。
 - `/health`、`/ready`、`/metrics`（Prometheus）：各接口的请求数与耗时、写入量、刷段、合并、上传下载、bloom 跳过的分段、后台错误。镜像的健康检查改用 `/health`。
 - `-query-timeout`（默认 1 分钟）、`-max-queries`（默认 CPU 数的 2 倍）、`-memory-limit`（DuckDB）、`-write-rate`（每个 logstore 每秒条数）。
 - 报错码与限制见 docs/compatibility.md「鉴权、限流与多节点」：这些没有与真实 SLS 逐条对照。

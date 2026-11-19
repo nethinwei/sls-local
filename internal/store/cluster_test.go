@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -123,5 +124,52 @@ func TestWriterFlushThreshold(t *testing.T) {
 	s.mu.Unlock()
 	if n := s.pendingRows(seq); n != 10 {
 		t.Fatalf("pending rows = %d, want 10", n)
+	}
+}
+
+// 合并掉的分段：查询节点刷新后删掉本地文件，两边都不留本地缓存的使用记录（否则刷段产生的小文件、记录会一直累积）。
+func TestClusterDropsReplacedLocalFiles(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	storage := "file://" + filepath.Join(tmp, "remote")
+	w := openNode(t, Options{WriterID: 1, SegmentDir: filepath.Join(tmp, "w"), Storage: storage})
+	defer w.Close()
+	r := openNode(t, Options{ReadOnly: true, SegmentDir: filepath.Join(tmp, "r"), Storage: storage})
+	defer r.Close()
+	for i := range 3 {
+		putSeq(t, w, i*20, 20)
+		if _, err := w.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := countAll(t, r); n != 60 { // 查询节点把三个小分段下载到本地
+		t.Fatalf("count = %d", n)
+	}
+	if files := segFiles(t, filepath.Join(tmp, "r")); len(files) != 3 {
+		t.Fatalf("reader files before compaction = %v", files)
+	}
+	if n, err := w.Compact(ctx); err != nil || n != 3 {
+		t.Fatalf("compact = %d, %v", n, err)
+	}
+	if err := r.refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if files := segFiles(t, filepath.Join(tmp, "r")); len(files) != 0 {
+		t.Errorf("reader kept replaced segments: %v", files)
+	}
+	if n := countAll(t, r); n != 60 {
+		t.Errorf("count after compaction = %d", n)
+	}
+	for name, s := range map[string]*Store{"writer": w, "reader": r} {
+		s.remote.mu.Lock()
+		for p := range s.remote.lastUse {
+			if _, err := os.Stat(p); err != nil {
+				t.Errorf("%s: usage record of a removed file: %s", name, p)
+			}
+		}
+		s.remote.mu.Unlock()
 	}
 }

@@ -49,6 +49,7 @@ spec:
             - -storage=s3://sls-logs/prod
             - -config=/etc/sls-local/sls-local.yaml
             - -https=:8443 # 镜像以非 root 运行，不监听 443；Service 把 443 转到这里
+            - -cache-size=20000000000 # 已上传分段的本地缓存，要比下面的持久卷小（卷上还有没刷段的日志）
             - -memory-limit=3GB
             - -ttl=168h
           env:

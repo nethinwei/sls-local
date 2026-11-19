@@ -114,7 +114,7 @@ Grafana SLS 数据源 ──GetLogs 等──► 负载均衡 ──► 查询�
 
 - **写入节点**（`-target=write`）只接受写入：日志先进本地的数据文件，每 2 秒写成 Parquet 分段上传，合并小文件、按 `-ttl` 删除过期的分段。数据目录要用持久卷，`-writer-id` 在写入节点之间不能重复（StatefulSet 里用 `-writer-id=auto` 取 Pod 序号）：编号在对象存储上有租约，重复的节点启动不了；旧进程没正常退出、又换了盘时，要等租约过期（1 分钟）。缩容掉的写入节点留下的过期分段由其余写入节点删除。租约按时间判断是否过期，各节点的时钟要同步（NTP）。
 - **查询节点**（`-target=read`）只做查询：每 2 秒读取写入节点维护的分段清单（只下载变了的），按需下载分段到本地缓存（`-cache-size`）。不存数据，可以随意增减。
-- 写入与查询节点都要 `-storage s3://bucket/prefix`，S3 端点与凭证取环境变量 `SLS_S3_ENDPOINT`（OSS 填 `oss-cn-hangzhou.aliyuncs.com` 这样的端点）、`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`，`SLS_S3_REGION` 可选。
+- 写入与查询节点都要 `-storage s3://bucket/prefix`，S3 端点取环境变量 `SLS_S3_ENDPOINT`（OSS 填 `oss-cn-hangzhou.aliyuncs.com` 这样的端点），`SLS_S3_REGION` 可选。凭证依次取环境变量 `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`，`~/.aws/credentials`，AWS 的 IAM 角色（EKS 的 IRSA、ECS 任务角色、EC2 实例角色）；OSS 用 AccessKey（环境变量）。
 - 在配置文件里写 `access_keys` 开启签名校验；采集器、SDK、Grafana 数据源用其中的密钥，`projects` 可以把密钥限定在某些 project。
 
 完整的示例（SeaweedFS 当 S3、2 个写入节点、1 个查询节点、LoongCollector、Grafana）：

@@ -208,6 +208,9 @@ func run(log *slog.Logger, httpAddr, httpsAddr, dataPath, cfgPath, target string
 	if err != nil {
 		return err
 	}
+	if len(keys) == 0 && target != "all" {
+		log.Warn("no access_keys in -config: requests are not authenticated, anyone who can reach this node can write and query")
+	}
 	srv.SetAccessKeys(keys)
 	srv.SetKeyProjects(projects)
 	srv.SetLimits(limits)

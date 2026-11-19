@@ -173,3 +173,24 @@ func TestClusterDropsReplacedLocalFiles(t *testing.T) {
 		s.remote.mu.Unlock()
 	}
 }
+
+// 查询节点一段时间没成功刷新（对象存储连不上）时不再就绪，刷新成功后恢复。
+func TestReaderReadiness(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	r := openNode(t, Options{ReadOnly: true, SegmentDir: filepath.Join(tmp, "r"), Storage: "file://" + filepath.Join(tmp, "remote")})
+	defer r.Close()
+	if err := r.Ping(ctx); err != nil {
+		t.Fatalf("fresh reader: %v", err)
+	}
+	r.refreshed.Store(time.Now().Add(-r.staleAfter - time.Second).UnixNano())
+	if err := r.Ping(ctx); err == nil {
+		t.Fatal("stale reader is ready")
+	}
+	if err := r.refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Ping(ctx); err != nil {
+		t.Errorf("after refresh: %v", err)
+	}
+}

@@ -24,6 +24,7 @@
 **运维**
 
 - 配置文件的 `access_keys`：校验请求签名（v1，与 SLS SDK、LoongCollector 相同），核对 Content-MD5；不配置时不校验。`projects` 可以把密钥限定在某些 project。先核对签名再读请求体。写入、查询节点没配 AccessKey 时启动日志里警告。
+- 单机（`-target=all`）开了 `-storage` 时默认 30 秒刷段（对象存储当备份，盘坏最多丢 30 秒）；查询节点 1 分钟以上没读到分段清单时 `/ready` 失败。告警规则示例 `examples/kubernetes/alerts.yaml`；README 增加「单点与容灾」。
 - `/health`、`/ready`、`/metrics`（Prometheus）：各接口的请求数与耗时、写入量、刷段、合并、上传下载、bloom 跳过的分段、后台错误。镜像的健康检查改用 `/health`。
 - `-query-timeout`（默认 1 分钟）、`-max-queries`（默认 CPU 数的 2 倍）、`-memory-limit`（DuckDB）、`-write-rate`（每个 logstore 每秒条数）。
 - 报错码与限制见 docs/compatibility.md「鉴权、限流与多节点」：这些没有与真实 SLS 逐条对照。

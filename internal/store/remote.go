@@ -340,6 +340,7 @@ func (s *Store) refresh(ctx context.Context) error {
 		removed = append(removed, g)
 	}
 	s.publish(&snapshot{segs: segs}, func() { s.removeSegments(removed) })
+	s.refreshed.Store(time.Now().UnixNano())
 	// 新分段的旁路文件（bloom、字段列清单）先下载好：查询多半看最近的数据，它们小，查询时就不用等
 	err = parallel(ctx, len(added), func(i int) error {
 		if err := s.ensureLocal(ctx, added[i]); err != nil && !errors.Is(err, fs.ErrNotExist) {

@@ -1,0 +1,56 @@
+# sls-local 的 Prometheus 告警规则示例（Prometheus 的 rule_files 格式；用 Prometheus Operator 时把 groups 放进
+# PrometheusRule 的 spec）。job 标签按自己的抓取配置改；阈值是起点，按实际流量调整。
+groups:
+  - name: sls-local
+    rules:
+      # 节点不就绪：写入节点的租约被别人拿走、数据库不可用，或查询节点 1 分钟以上没读到对象存储上的分段清单
+      - alert: SlsLocalNotReady
+        expr: kube_pod_status_ready{condition="false", pod=~"sls-local-.*"} == 1 # kube-state-metrics
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "sls-local {{ $labels.pod }} 不就绪"
+
+      # 后台工作（刷段、合并、上传、刷新）持续出错：看节点日志里的 error
+      - alert: SlsLocalBackgroundErrors
+        expr: increase(sls_local_background_errors_total[10m]) > 5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "sls-local {{ $labels.instance }} 后台工作持续出错"
+
+      # 上传对象存储失败：分段先留在本地盘上，恢复后重传；持续失败时本地盘会写满，查询节点看不到新数据
+      - alert: SlsLocalUploadFailures
+        expr: increase(sls_local_upload_failures_total[10m]) > 0
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "sls-local {{ $labels.instance }} 上传对象存储持续失败"
+
+      # 没刷段的日志一直在涨：刷段跟不上写入，或刷段失败（这些日志只在本地盘上）
+      - alert: SlsLocalPendingRowsGrowing
+        expr: sls_local_pending_rows > 5000000 and deriv(sls_local_pending_rows[10m]) > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "sls-local {{ $labels.instance }} 未刷段的日志持续增加（{{ $value }}）"
+
+      # 5xx 比例
+      - alert: SlsLocalServerErrors
+        expr: |
+          sum by (instance) (rate(sls_local_requests_total{status=~"5.."}[5m]))
+            / sum by (instance) (rate(sls_local_requests_total[5m])) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "sls-local {{ $labels.instance }} 5xx 超过 5%"
+
+      # 数据盘（需要 kubelet 的卷指标）：超过 80% 时扩盘或缩短 -ttl
+      - alert: SlsLocalDiskFull
+        expr: |
+          kubelet_volume_stats_used_bytes{persistentvolumeclaim=~"data-sls-local-.*"}
+            / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"data-sls-local-.*"} > 0.8
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "sls-local 数据盘 {{ $labels.persistentvolumeclaim }} 使用超过 80%"

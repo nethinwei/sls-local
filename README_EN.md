@@ -67,7 +67,7 @@ services:
 | `-version` | | Print the version |
 | `-reindex` | | Rebuild the full-text column of all logs with the current indexes in `-config`, then exit (stop the running sls-local first; on a write node in a cluster) |
 | `-segments` | `segments/` next to the data file | Parquet segment directory; the local cache with object storage |
-| `-flush-interval` | `5m` (`2s` on write nodes) | How often new logs are written into segments |
+| `-flush-interval` | `5m` (`2s` on write nodes; `30s` on a single node with `-storage`) | How often new logs are written into segments |
 | `-flush-rows` | `1000000` | Flush early once this many new logs are waiting |
 | `-storage` | | Object storage: `s3://bucket/prefix` or `file:///path`, see [Production](#production) |
 | `-cache-size` | `53687091200` (50 GB) | Local cache limit in bytes when using object storage |
@@ -135,7 +135,19 @@ Kubernetes manifests (write nodes as a StatefulSet, read nodes as a Deployment, 
 - The first query that needs a segment downloads the whole file (up to 1M logs, in parallel): cold data is slower the first time; give the cache disk enough room. Read nodes fetch the bloom filters of new segments as soon as they see them.
 - Object storage requests: every 2 seconds each write node uploads a segment and its bloom filter for each logstore that received logs (rewritten a few more times by compaction), plus a manifest; read nodes list the manifests every 2 seconds. With 50 logstores written continuously, a write node makes about 50 PUTs per second (about 4.3 million a day). Raise `-flush-interval` to make fewer, at the cost of read nodes seeing data later.
 - Known limits: a query runs on one read node (more read nodes add concurrency, not speed for a single query); read nodes do not see logs a write node has not flushed yet; the error codes for authentication and limits have not been checked one by one against SLS ([compatibility](docs/compatibility.md)).
-- Monitoring: `/metrics` on every node (Prometheus format: requests and durations per API, ingestion, flushes, uploads and downloads, segments skipped by bloom filters), `/health` (liveness) and `/ready` (readiness), none of them signed.
+- Monitoring: `/metrics` on every node (Prometheus format: requests and durations per API, ingestion, flushes, uploads and downloads, segments skipped by bloom filters), `/health` (liveness) and `/ready` (readiness), none of them signed. `/ready` fails when another node took a write node's lease, or when a read node has not read the segment manifests from object storage for over a minute. Example alerting rules: [examples/kubernetes/alerts.yaml](examples/kubernetes/alerts.yaml).
+
+**Single points of failure**
+
+| Failure | Single node (`-target=all`) | Split read/write |
+|---|---|---|
+| Process crash | Restarted automatically (`restart: unless-stopped`, Kubernetes); acknowledged logs are in the data file | Same |
+| Machine down | Reads and writes stop until it is back; collectors buffer and retry, so logs arrive late but are not lost. On Kubernetes use a cloud disk so the pod restarts on another node | Writes go to the other write nodes, queries to the other read nodes; the down node's unflushed logs (about 2 seconds at most) show up after it restarts |
+| Disk lost | Without `-storage` all data is lost. With `-storage` segments are backed up to object storage and restored when it starts on a new disk; at most one flush interval (30 seconds by default) of logs is lost | Uploaded segments are in object storage; at most about 2 seconds of that write node's unflushed logs are lost |
+| Object storage down | Reads and writes go on; segments wait locally and are uploaded when it is back. A restart during the outage fails (startup reads the lease and the segments) | Writes go on, segments wait on the write nodes; read nodes serve what they have and stop being ready after a minute. Nodes restarted during the outage fail to start |
+| Clock drift | With signatures on, requests more than 15 minutes off are rejected | Same; write node leases are time based too. Run NTP everywhere |
+
+On a single node, the one thing to do is add `-storage` (object storage, or a mounted NAS directory as `file:///…`): a lost disk then costs at most 30 seconds of logs instead of everything.
 
 ## Compatibility
 

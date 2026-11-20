@@ -6,7 +6,7 @@
 name: sls-local-production
 
 x-sls-local: &sls-local
-  image: ${SLS_LOCAL_IMAGE:-ghcr.io/nethinwei/sls-local:0.3.0}
+  image: ${SLS_LOCAL_IMAGE:-ghcr.io/nethinwei/sls-local:0.3.1}
   environment:
     SLS_S3_ENDPOINT: seaweedfs:8333
     SLS_S3_INSECURE: "1" # 示例的 SeaweedFS 走 HTTP；OSS / S3 不要设

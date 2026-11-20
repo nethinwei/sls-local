@@ -35,7 +35,7 @@ The example runs a log generator → LoongCollector → sls-local → Grafana 13
 ```yaml
 services:
   sls-local:
-    image: ghcr.io/nethinwei/sls-local:0.3.0
+    image: ghcr.io/nethinwei/sls-local:0.3.1
     command: ["-config", "/etc/sls-local.yaml"]   # optional: create logstores, declare indexes, set access keys
     volumes: ["./sls-local.yaml:/etc/sls-local.yaml:ro", "sls:/data"]
     ports: ["127.0.0.1:8080:8080"]               # localhost only: no authentication without access keys

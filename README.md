@@ -35,7 +35,7 @@ docker compose up -d
 ```yaml
 services:
   sls-local:
-    image: ghcr.io/nethinwei/sls-local:0.3.0
+    image: ghcr.io/nethinwei/sls-local:0.3.1
     command: ["-config", "/etc/sls-local.yaml"]   # 可选：预建 logstore、声明索引、配置 AccessKey
     volumes: ["./sls-local.yaml:/etc/sls-local.yaml:ro", "sls:/data"]
     ports: ["127.0.0.1:8080:8080"]               # 只绑本机：没有配置 AccessKey 时不鉴权

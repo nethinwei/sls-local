@@ -42,7 +42,7 @@ spec:
       securityContext: {fsGroup: 10001}
       containers:
         - name: sls-local
-          image: ghcr.io/nethinwei/sls-local:0.3.0
+          image: ghcr.io/nethinwei/sls-local:0.3.1
           args:
             - -target=write
             - -writer-id=auto
@@ -119,7 +119,7 @@ spec:
       securityContext: {fsGroup: 10001}
       containers:
         - name: sls-local
-          image: ghcr.io/nethinwei/sls-local:0.3.0
+          image: ghcr.io/nethinwei/sls-local:0.3.1
           args:
             - -target=read
             - -storage=s3://sls-logs/prod

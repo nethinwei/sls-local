@@ -59,13 +59,20 @@ func rename(duck, typ string) fn {
 	}
 }
 
-// tmpl 用模板生成：$1、$2… 是参数。
+// tmpl 用模板生成：$1、$2… 是参数。模板只扫描一遍：替换进去的参数里即使出现 $1 这样的文字（比如字符串字面量
+// '$1'），也不会再被展开，否则一个参数会被拼到另一个参数的引号外面，成为可执行的 SQL。
 func tmpl(t, typ string) fn {
 	return func(c *fcall) (val, error) {
-		s := t
-		for i := len(c.args); i >= 1; i-- {
-			s = strings.ReplaceAll(s, "$"+string(rune('0'+i)), c.args[i-1].sql)
+		var b strings.Builder
+		for i := 0; i < len(t); i++ {
+			if t[i] == '$' && i+1 < len(t) && t[i+1] >= '1' && t[i+1] <= '9' && int(t[i+1]-'0') <= len(c.args) {
+				b.WriteString(c.args[t[i+1]-'1'].sql)
+				i++
+				continue
+			}
+			b.WriteByte(t[i])
 		}
+		s := b.String()
 		if typ == "$0" {
 			return val{s, c.argType(0)}, nil
 		}

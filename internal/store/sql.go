@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/duckdb/duckdb-go/v2"
@@ -70,9 +71,11 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 		}
 		processed <- err
 	}()
+	// 每条返回路径都要等它结束：它还在用快照 sn，release 之后快照里的头部行与分段文件可能被删掉
+	wait := sync.OnceValue(func() error { return <-processed })
+	defer wait()
 	rows, err := s.db.QueryContext(ctx, q, append(cteArgs, stmt.Args...)...)
 	if err != nil {
-		<-processed
 		return nil, sqlError(stmt, err)
 	}
 	defer rows.Close()
@@ -129,10 +132,9 @@ func (s *Store) RunSQL(ctx context.Context, p SearchParams, stmt *query.SQLStmt)
 		res.Rows = append(res.Rows, b.Bytes())
 	}
 	if err := rows.Err(); err != nil {
-		<-processed
 		return nil, sqlError(stmt, err)
 	}
-	if err := <-processed; err != nil {
+	if err := wait(); err != nil {
 		return nil, sqlError(stmt, err)
 	}
 	return res, nil

@@ -3,6 +3,8 @@ package wire
 import (
 	"os"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // 样本来自 LoongCollector 3.4.1 的真实请求，见 docs/wire-findings.md。
@@ -36,5 +38,22 @@ func TestDecompressRejectsBadSize(t *testing.T) {
 	}
 	if _, err := Decompress([]byte{1}, "snappy", 1); err == nil {
 		t.Fatal("want error for unsupported compression")
+	}
+}
+
+// 几十 KB 的压缩包可以解压出几百 MB：解压后的大小与 lz4、deflate 一样受 MaxRawSize 限制。
+func TestDecompressZstdLimit(t *testing.T) {
+	enc, err := zstd.NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	if _, err := Decompress(enc.EncodeAll(make([]byte, MaxRawSize+1), nil), "zstd", 0); err == nil {
+		t.Fatal("want error for a body larger than MaxRawSize after decompression")
+	}
+	small := []byte("hello")
+	out, err := Decompress(enc.EncodeAll(small, nil), "zstd", len(small))
+	if err != nil || string(out) != "hello" {
+		t.Fatalf("Decompress = %q, %v", out, err)
 	}
 }

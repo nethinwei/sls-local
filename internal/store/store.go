@@ -710,6 +710,9 @@ func (s *Store) DeleteBefore(ctx context.Context, cutoff time.Time) (int64, erro
 	if err != nil {
 		return n + d, err
 	}
+	if err := s.resyncManifests(ctx); err != nil {
+		return n + d, err
+	}
 	m, err := s.dropAbandonedBefore(ctx, cutoff.Unix())
 	return n + d + m, err
 }

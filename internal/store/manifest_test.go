@@ -90,6 +90,42 @@ func TestManifests(t *testing.T) {
 	refresh(25)
 }
 
+// 写入节点滚动重启时，另一个写入节点可能把它当成已下线（正常退出删掉了租约），用重启前的列举结果覆盖它的清单。
+// 写入节点记着自己写过的清单内容，内容没变就不再写：保留期检查时要按当前快照重写全部清单，被覆盖的才能恢复。
+func TestManifestsHealAfterOverwrite(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	storage := "file://" + filepath.Join(tmp, "remote")
+	w := openNode(t, Options{WriterID: 1, SegmentDir: filepath.Join(tmp, "w1"), Storage: storage})
+	defer w.Close()
+	r := openNode(t, Options{ReadOnly: true, SegmentDir: filepath.Join(tmp, "r"), Storage: storage})
+	defer r.Close()
+
+	putSeq(t, w, 0, 10)
+	if _, err := w.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// 另一个节点用旧的列举结果覆盖了这个小时的清单（这里是一个空清单）
+	if err := w.remote.obj.WriteSmall(ctx, manifestKey(1, segBase), []byte(`{"segments":[]}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := countAll(t, r); n != 0 {
+		t.Fatalf("reader count after overwrite = %d, want 0", n)
+	}
+	if _, err := w.DeleteBefore(ctx, time.Unix(segBase-3600, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := countAll(t, r); n != 10 {
+		t.Errorf("reader count after retention check = %d, want 10", n)
+	}
+}
+
 // slowObjects 让下载慢一点，记下同时在下载的最大个数。
 type slowObjects struct {
 	objects

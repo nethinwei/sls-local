@@ -102,6 +102,19 @@ func (s *Store) syncManifests(ctx context.Context) error {
 	return nil
 }
 
+// resyncManifests 忘掉记着的清单内容，按当前快照重写本节点的全部清单（保留期检查时调用，每小时一次）。
+// 写入节点滚动重启时会先删掉租约，别的写入节点可能在这期间把它当成已下线，用重启前的列举结果覆盖它的清单；
+// 只按记着的内容比较的话，被覆盖的小时不会再写，查询节点一直看不到其中的分段。
+func (s *Store) resyncManifests(ctx context.Context) error {
+	if s.remote == nil || s.readOnly || s.fenced.Load() {
+		return nil
+	}
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	s.remote.manifests = nil
+	return s.syncManifests(ctx)
+}
+
 // manifestSegments 是查询节点看到的分段：全部清单里的分段的并集。只下载版本变了的清单。
 func (s *Store) manifestSegments(ctx context.Context) ([]segment, error) {
 	r := s.remote

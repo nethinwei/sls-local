@@ -15,7 +15,8 @@ import (
 // MaxRawSize 是解压后请求体的上限。SLS 单次 PutLogs 限 10MB，这里放宽一些，只用来挡住异常的 x-log-bodyrawsize。
 const MaxRawSize = 64 << 20
 
-var zstdDecoder, _ = zstd.NewReader(nil, zstd.WithDecoderConcurrency(0))
+// zstdDecoder 解压后的大小上限是 MaxRawSize：几十 KB 的压缩包可以解压出几百 MB。
+var zstdDecoder, _ = zstd.NewReader(nil, zstd.WithDecoderConcurrency(0), zstd.WithDecoderMaxMemory(MaxRawSize))
 
 // Decompress 按 compressType（lz4、zstd、deflate 或空）还原请求体，rawSize 取自 x-log-bodyrawsize。
 func Decompress(body []byte, compressType string, rawSize int) ([]byte, error) {
@@ -33,7 +34,8 @@ func Decompress(body []byte, compressType string, rawSize int) ([]byte, error) {
 		}
 		return out[:n], nil
 	case "zstd":
-		out, err := zstdDecoder.DecodeAll(body, make([]byte, 0, max(rawSize, 0)))
+		// rawSize 来自请求头，只作为预分配的提示，不能超过上限
+		out, err := zstdDecoder.DecodeAll(body, make([]byte, 0, min(max(rawSize, 0), MaxRawSize)))
 		if err != nil {
 			return nil, fmt.Errorf("zstd: %w", err)
 		}

@@ -57,8 +57,13 @@ func TestIsolation(t *testing.T) {
 			t.Errorf("Translate(%q): want error, got %q", in, st.SQL)
 		}
 	}
+	// 函数模板逐个替换 $n 时，参数里出现的 $1 不能再被展开：否则前一个参数会被拼到后一个参数的引号外面
+	st, err := Translate(` select url_extract_parameter(' || (select 1) || ', '$1') as x from log`, ix, "store")
+	if err != nil || !strings.Contains(st.SQL, `'[?&]' || '$1' || '=`) {
+		t.Errorf("template arguments: %v %v", st, err)
+	}
 	// 内部列名（contents、project）只会被当成字段名
-	st, err := Translate(" select contents, project", ix, "store")
+	st, err = Translate(" select contents, project", ix, "store")
 	if err != nil || strings.Contains(st.SQL, " contents") || strings.Contains(st.SQL, " project") {
 		t.Errorf("internal columns: %v %v", st, err)
 	}

@@ -1,6 +1,6 @@
 # sls-local
 
-A log service that speaks the Alibaba Cloud Simple Log Service (SLS) API: LoongCollector and the SLS SDKs write to it, and SLS data sources for Grafana query it. For local development it is one process and one data file; in production it runs as write nodes and read nodes, with the data in Parquet segments on object storage (OSS / S3).
+A log service that implements the Alibaba Cloud Simple Log Service (SLS) HTTP API: LoongCollector and the SLS SDKs write to it, and SLS data sources for Grafana query it. For local development it is one process and one data file; in production it runs as write nodes and read nodes, with the data in Parquet segments on object storage (OSS / S3).
 
 [中文](README.md)
 
@@ -10,7 +10,7 @@ A log service that speaks the Alibaba Cloud Simple Log Service (SLS) API: LoongC
 
 Production logs live in SLS, but local development has two poor options: a cloud logstore for development (AccessKeys, public network, metered billing), or Loki (a different query language, dashboards and alerts written twice).
 
-sls-local makes your laptop speak SLS:
+sls-local implements the SLS API locally:
 
 - **Collectors unchanged**: point LoongCollector's `flusher_sls` Endpoint at `sls-local`.
 - **Queries unchanged**: SLS data sources such as [nethinwei-sls-datasource](https://github.com/nethinwei/sls-grafana-datasource) only change their URL; production dashboards, search statements and SQL work as they are.
@@ -184,6 +184,7 @@ make build          # build bin/sls-local
 make image          # build the image
 ```
 
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute and [SECURITY.md](SECURITY.md) for reporting vulnerabilities (both in Chinese).
 - End-to-end tests use the official Go SDK as the client, with expectations taken from the real service.
 - To add or change behavior, check it against SLS first, record it in [docs/wire-findings.md](docs/wire-findings.md), then implement and test it.
 - `tools/wiredump` records raw requests (HTTP and self-signed HTTPS) to capture the protocol details of a new client.

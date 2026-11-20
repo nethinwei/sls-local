@@ -16,7 +16,8 @@ sls-local 的目标是：**SLS 的客户端（SDK、LoongCollector、Grafana 数
 | 旧版 GetLogs（`GET ?type=log`） | ❌ | 用 GetLogsV3 |
 | CreateLogStore、CreateIndex、UpdateIndex | ❌ | logstore 在写入时自动创建，索引写在配置文件里 |
 | PullLogs、消费组、MetricStore、数据加工、告警 | ❌ | |
-| 签名校验、RAM 权限 | ❌ | 签名只解析不校验，任何 AccessKey 都能用 |
+| 签名校验（v1） | 部分 | 配置 `access_keys` 时校验 v1 签名，见下文「鉴权、限流与多节点」；不配置时任何 AccessKey 都能用 |
+| 签名 v4、RAM 权限、STS | ❌ | 权限只有「密钥 → 可访问 project」一级 |
 
 ## 检索语法
 

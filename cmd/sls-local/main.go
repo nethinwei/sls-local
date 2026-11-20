@@ -1,4 +1,4 @@
-// sls-local 是说阿里云日志服务（SLS）协议的本地服务：LoongCollector / SLS SDK 用 PutLogs 写入，
+// sls-local 是实现阿里云日志服务（SLS）HTTP API 的本地服务：LoongCollector / SLS SDK 用 PutLogs 写入，
 // Grafana 的 SLS 数据源插件用 GetLogs 查询，数据存在本地 DuckDB 里。
 package main
 

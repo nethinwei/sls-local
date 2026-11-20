@@ -1,5 +1,5 @@
 // Package api 实现 SLS 的 HTTP 接口。project 取自 Host 的第一段（{project}.{endpoint}），
-// 与 SLS SDK、LoongCollector 的请求方式一致。签名只解析不校验。
+// 与 SLS SDK、LoongCollector 的请求方式一致。配置了 access_keys 时校验请求签名（v1，见 auth.go），否则不校验。
 package api
 
 import (

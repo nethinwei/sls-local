@@ -1,6 +1,6 @@
 # sls-local
 
-说阿里云日志服务（SLS）协议的日志服务：LoongCollector 和 SLS SDK 照常写入，Grafana 的 SLS 数据源照常查询。本地开发时一个进程、一个数据文件就能跑；生产环境里分成写入节点与查询节点，数据以 Parquet 分段放在对象存储（OSS / S3）上。
+实现阿里云日志服务（SLS）HTTP API 的日志服务：LoongCollector 和 SLS SDK 照常写入，Grafana 的 SLS 数据源照常查询。本地开发时一个进程、一个数据文件就能跑；生产环境里分成写入节点与查询节点，数据以 Parquet 分段放在对象存储（OSS / S3）上。
 
 [English](README_EN.md)
 
@@ -10,7 +10,7 @@
 
 生产用 SLS 查日志，本地开发却只能二选一：接一个云上的开发 logstore（要 AccessKey、走公网、按量计费），或者换成 Loki（查询语法、看板、告警全都要另写一套）。
 
-sls-local 让本地也说 SLS 的协议：
+sls-local 在本地实现 SLS 的协议：
 
 - **采集端不改**：LoongCollector 的 `flusher_sls` 只把 Endpoint 换成 `sls-local`。
 - **查询端不改**：[nethinwei-sls-datasource](https://github.com/nethinwei/sls-grafana-datasource) 等 SLS 数据源只换 URL；生产的看板、检索语句、SQL 拿来就能用。
@@ -183,6 +183,7 @@ make build          # 编译到 bin/sls-local
 make image          # 构建镜像
 ```
 
+- 贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题的报告方式见 [SECURITY.md](SECURITY.md)。
 - 端到端测试用官方 Go SDK 当客户端，期望值来自真实 SLS 的行为。
 - 增加或修改语义时，先用真实 SLS 对照，把结论记进 [docs/wire-findings.md](docs/wire-findings.md)，再实现和写测试。
 - `tools/wiredump` 记录收到的原始请求（HTTP 与自签 HTTPS），用来抓新客户端的协议细节。
